@@ -4,11 +4,13 @@ package gum
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
 	"github.com/charmbracelet/huh"
+	"github.com/starpkg/base"
 	"go.starlark.net/starlark"
 )
 
@@ -17,32 +19,133 @@ const (
 	ModuleName = "gum"
 )
 
-var (
-	none   = starlark.None
-	theme  = huh.ThemeCharm()
-	keymap = huh.NewDefaultKeyMap()
+// Configuration key constants
+const (
+	configKeyWidth  = "width"
+	configKeyHeight = "height"
+	configKeyTheme  = "theme"
 )
 
-// NewModule creates a new module loader for the gum module.
-func NewModule() starlet.ModuleLoader {
-	// adjust keymap
-	keymap.Text.NewLine.SetHelp("ctrl+j", "new line")
-	//keymap.Quit = key.NewBinding(key.WithKeys("ctrl+c", "esc"))
-	keymap.FilePicker.Open.SetEnabled(false)
+var (
+	none  = starlark.None
+	empty string
+)
 
-	// build module
-	sd := starlark.StringDict{
-		"write":        starlark.NewBuiltin(ModuleName+".write", starWrite),
-		"input":        starlark.NewBuiltin(ModuleName+".input", starInput),
-		"select":       starlark.NewBuiltin(ModuleName+".select", starSelect),
-		"multi_select": starlark.NewBuiltin(ModuleName+".multi_select", starMultiSelect),
-		"confirm":      starlark.NewBuiltin(ModuleName+".confirm", starConfirm),
-		"note":         starlark.NewBuiltin(ModuleName+".note", starNote),
-		"spin":         starlark.NewBuiltin(ModuleName+".spin", starSpinner),
-		"file_pick":    starlark.NewBuiltin(ModuleName+".file_pick", starFilePicker),
-		"colorize":     starlark.NewBuiltin(ModuleName+".colorize", starColorize),
+// Module wraps the ConfigurableModule with specific functionality for TUI components.
+type Module struct {
+	cfgMod  *base.ConfigurableModule
+	ext     *base.ConfigurableModuleExt
+	theme   *huh.Theme
+	keymap  *huh.KeyMap
+	isReady bool
+}
+
+// NewModule creates a new instance of Module with default configurations.
+func NewModule() *Module {
+	return newModuleWithOptions(
+		genConfigOption(configKeyWidth, "Default width for components", 50),
+		genConfigOption(configKeyHeight, "Default height for components", 0),
+		genConfigOption(configKeyTheme, "Theme name to use (base, base16, charm, dracula, catppuccin)", "charm"),
+	)
+}
+
+// NewModuleWithConfig creates a new instance of Module with the given configuration values.
+func NewModuleWithConfig(width, height int, themeName string) *Module {
+	return newModuleWithOptions(
+		genConfigOption(configKeyWidth, "Default width for components with preset value", width),
+		genConfigOption(configKeyHeight, "Default height for components with preset value", height),
+		genConfigOption(configKeyTheme, "Theme name to use with preset value", themeName),
+	)
+}
+
+// genConfigOption creates a configuration option with common settings.
+// It sets up the name, description, default value, and environment variable.
+func genConfigOption[T any](name, description string, defaultValue T) *base.ConfigOption[T] {
+	return base.NewConfigOption(defaultValue).
+		WithName(name).
+		WithDescription(description).
+		WithEnvVar(strings.ToUpper(ModuleName + "_" + name))
+}
+
+// newModuleWithOptions creates a Module with the given configuration options.
+func newModuleWithOptions(widthOpt *base.ConfigOption[int], heightOpt *base.ConfigOption[int], themeOpt *base.ConfigOption[string]) *Module {
+	cm, _ := base.NewConfigurableModuleWithConfigOptions(
+		widthOpt,
+		heightOpt,
+		themeOpt,
+	)
+	return &Module{
+		cfgMod: cm,
+		ext:    cm.Extend(),
 	}
-	return dataconv.WrapModuleData(ModuleName, sd)
+}
+
+// LoadModule returns the Starlark module loader with the gum-specific functions.
+func (m *Module) LoadModule() starlet.ModuleLoader {
+	// Initialize module components
+	m.initialize()
+
+	// Additional module functions
+	additionalFuncs := starlark.StringDict{
+		"write":        starlark.NewBuiltin(ModuleName+".write", m.starWrite),
+		"input":        starlark.NewBuiltin(ModuleName+".input", m.starInput),
+		"select":       starlark.NewBuiltin(ModuleName+".select", m.starSelect),
+		"multi_select": starlark.NewBuiltin(ModuleName+".multi_select", m.starMultiSelect),
+		"confirm":      starlark.NewBuiltin(ModuleName+".confirm", m.starConfirm),
+		"note":         starlark.NewBuiltin(ModuleName+".note", m.starNote),
+		"spin":         starlark.NewBuiltin(ModuleName+".spin", m.starSpinner),
+		"file_pick":    starlark.NewBuiltin(ModuleName+".file_pick", m.starFilePicker),
+		"colorize":     starlark.NewBuiltin(ModuleName+".colorize", m.starColorize),
+	}
+	return m.cfgMod.LoadModule(ModuleName, additionalFuncs)
+}
+
+// initialize prepares the module state based on configuration.
+func (m *Module) initialize() {
+	if m.isReady {
+		return
+	}
+
+	// Set up theme
+	themeName := m.ext.GetString(configKeyTheme, "charm")
+	switch strings.ToLower(themeName) {
+	case "base":
+		m.theme = huh.ThemeBase()
+	case "base16":
+		m.theme = huh.ThemeBase16()
+	case "charm":
+		m.theme = huh.ThemeCharm()
+	case "dracula":
+		m.theme = huh.ThemeDracula()
+	case "catppuccin":
+		m.theme = huh.ThemeCatppuccin()
+	default: // "charm" is default
+		m.theme = huh.ThemeCharm()
+	}
+
+	// Set up keymap
+	m.keymap = huh.NewDefaultKeyMap()
+	m.keymap.Text.NewLine.SetHelp("ctrl+j", "new line")
+	// m.keymap.Quit = key.NewBinding(key.WithKeys("ctrl+c", "esc"))
+	m.keymap.FilePicker.Open.SetEnabled(false)
+
+	m.isReady = true
+}
+
+// getWidth returns the configured width or default value.
+func (m *Module) getWidth(width int) int {
+	if width > 0 {
+		return width
+	}
+	return m.ext.GetInt(configKeyWidth, 50)
+}
+
+// getHeight returns the configured height or default value.
+func (m *Module) getHeight(height int) int {
+	if height > 0 {
+		return height
+	}
+	return m.ext.GetInt(configKeyHeight, 0)
 }
 
 func ignorableError(err error) bool {

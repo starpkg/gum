@@ -14,7 +14,7 @@ import (
 
 // starSelect is a Starlark function to create a TUI select for choosing an option from a list.
 // def select(options: Union[Iterable, Mapping], value: str = "", title: str = "Choose:", description: str = "", validate: Callable = None, width: int = 50, height: int = 0, inline: bool = False, show_filter: bool = False, show_help: bool = True, timeout: float = 0) -> str
-func starSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		options      starlark.Value         // list of option values, or map of key-value pairs of options
 		initialValue starlark.Value         // initial value, converted to string if not already
@@ -61,16 +61,16 @@ func starSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tupl
 				Title(title).
 				Description(description).
 				Options(opts...).
-				Height(height).
+				Height(m.getHeight(height)).
 				Validate(convertStringValidator(thread, &validateFunc)).
 				Inline(inline).
 				Filtering(showFilter).
 				Value(&value),
 		),
 	).
-		WithWidth(width).
-		WithTheme(theme).
-		WithKeyMap(keymap).
+		WithWidth(m.getWidth(width)).
+		WithTheme(m.theme).
+		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
 		WithTimeout(time.Duration(timeoutSec) * time.Second).
 		Run()
@@ -87,7 +87,7 @@ func starSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tupl
 
 // starMultiSelect is a Starlark function to create a TUI multi-select for choosing multiple options from a list.
 // def multi_select(options: Union[Iterable, Mapping], value: List[str] = [], title: str = "Choose:", description: str = "", validate: Callable = None, limit: int = 0, width: int = 50, height: int = 0, show_filter: bool = False, show_help: bool = True, timeout: float = 0) -> List[str]
-func starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		options      starlark.Value                                  // list of option values, or map of key-value pairs of options
 		initialValue = types.NewOneOrManyNoDefault[starlark.Value]() // initial value, converted to string if not already
@@ -137,16 +137,16 @@ func starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark
 				Description(description).
 				Options(opts...).
 				Limit(limit).
-				Height(height).
+				Height(m.getHeight(height)).
 				Validate(convertStringListValidator(thread, &validateFunc)).
 				Filtering(showFilter).
 				Filterable(true).
 				Value(&values),
 		),
 	).
-		WithWidth(width).
-		WithTheme(theme).
-		WithKeyMap(keymap).
+		WithWidth(m.getWidth(width)).
+		WithTheme(m.theme).
+		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
 		WithTimeout(time.Duration(timeoutSec) * time.Second).
 		Run()
@@ -167,7 +167,7 @@ func starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark
 
 // starConfirm is a Starlark function to create a TUI confirmation dialog for asking a yes/no question.
 // def confirm(value: bool = False, title: str = "Are you sure?", description: str = "", yes: str = "Yes", no: str = "No", inline: bool = False, show_help: bool = True, timeout: float = 0) -> bool
-func starConfirm(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starConfirm(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		initialValue = starlark.Bool(false) // initial value, should be a boolean
 		title        = "Are you sure?"      // title text
@@ -204,8 +204,8 @@ func starConfirm(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tup
 				Value(&choice),
 		),
 	).
-		WithTheme(theme).
-		WithKeyMap(keymap).
+		WithTheme(m.theme).
+		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
 		WithTimeout(time.Duration(timeoutSec) * time.Second).
 		Run()
@@ -220,37 +220,46 @@ func starConfirm(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tup
 	return starlark.Bool(choice), nil
 }
 
+// convertOptionList converts from a Starlark iterable/mapping to a list of huh.Options.
 func convertOptionList(r starlark.Value) ([]huh.Option[string], error) {
-	var options []huh.Option[string]
-	if m, ok := r.(starlark.IterableMapping); ok {
-		// map of key-value pairs
-		items := m.Items()
-		for _, item := range items {
-			if len(item) < 2 {
-				continue
-			}
-			key := dataconv.StarString(item[0])
-			val := dataconv.StarString(item[1])
-			options = append(options, huh.NewOption[string](key, val))
+	var (
+		opts []huh.Option[string]
+	)
+
+	// handle various types of options input
+	switch t := r.(type) {
+	case *starlark.List:
+		// list of option values
+		for i := 0; i < t.Len(); i++ {
+			v := t.Index(i)
+			s := dataconv.StarString(v)
+			opts = append(opts, huh.NewOption(s, s))
 		}
-	} else if l, ok := r.(starlark.Iterable); ok {
-		// list of values
-		iter := l.Iterate()
+	case *starlark.Dict:
+		// map of key -> value mapping (key is displayed, value is returned)
+		for _, k := range t.Keys() {
+			v, _, _ := t.Get(k)
+			opts = append(opts, huh.NewOption(dataconv.StarString(k), dataconv.StarString(v)))
+		}
+	case starlark.Iterable:
+		// other iterables
+		iter := t.Iterate()
 		defer iter.Done()
-		var x starlark.Value
-		for iter.Next(&x) {
-			val := dataconv.StarString(x)
-			options = append(options, huh.NewOption(val, val))
+		var v starlark.Value
+		for iter.Next(&v) {
+			s := dataconv.StarString(v)
+			opts = append(opts, huh.NewOption(s, s))
 		}
-	} else {
-		return nil, errors.New("options must be iterable or mapping")
+	default:
+		return nil, fmt.Errorf("options expected iterable or mapping, got %s", r.Type())
 	}
-	return options, nil
+
+	return opts, nil
 }
 
 // starFilePicker is a Starlark function to create a TUI file picker for selecting a file or directory.
 // def file_picker(path: str = ".", title: str = "", description: str = "", validate: Callable = None, allow_ext: Union[str, List[str]] = [], allow_dir: bool = False, allow_file: bool = True, show_hidden: bool = False, show_perm: bool = True, show_size: bool = False, height: int = 10, show_help: bool = True, timeout: float = 0) -> str
-func starFilePicker(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		initialPath     = "."                                           // initial path string
 		title           = ""                                            // title text
@@ -313,8 +322,8 @@ func starFilePicker(thread *starlark.Thread, b *starlark.Builtin, args starlark.
 				Value(&value),
 		),
 	).
-		WithTheme(theme).
-		WithKeyMap(keymap).
+		WithTheme(m.theme).
+		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
 		WithTimeout(time.Duration(timeoutSec) * time.Second).
 		Run()

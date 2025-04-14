@@ -15,7 +15,7 @@ import (
 
 // starWrite is a Starlark function to create a TUI text area for getting multi-line input from the user.
 // def write(value: str = "", placeholder: str = "Write something...", title: str = "", description: str = "", char_limit: int = 0, validate: Callable = None, width: int = 50, height: int = 5, show_line: bool = false, show_help: bool = true, timeout: float = 0) -> str
-func starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		initialValue    starlark.Value         // initial value, converted to string if not already
 		placeholder     = "Write something..." // placeholder value
@@ -59,10 +59,10 @@ func starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple
 				Value(&value),
 		),
 	).
-		WithWidth(width).
-		WithHeight(height).
-		WithTheme(theme).
-		WithKeyMap(keymap).
+		WithWidth(m.getWidth(width)).
+		WithHeight(m.getHeight(height)).
+		WithTheme(m.theme).
+		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
 		WithTimeout(time.Duration(timeoutSec) * time.Second).
 		Run()
@@ -79,7 +79,7 @@ func starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple
 
 // starInput is a Starlark function to create a TUI input field for getting single-line text from the user.
 // def input(value: str = "", prompt: str = "> ", placeholder: str = "Type something...", title: str = "", description: str = "", char_limit: int = 0, suggestions: List[str] = [], password: bool = false, validate: Callable = None, width: int = 50, inline: bool = false, show_help: bool = true, timeout: float = 0) -> str
-func starInput(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starInput(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		initialValue starlark.Value                                                         // initial value, converted to string if not already
 		prompt                              = "> "                                          // prompt text
@@ -148,9 +148,9 @@ func starInput(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple
 				Value(&value),
 		),
 	).
-		WithWidth(width).
-		WithTheme(theme).
-		WithKeyMap(keymap).
+		WithWidth(m.getWidth(width)).
+		WithTheme(m.theme).
+		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
 		WithTimeout(time.Duration(timeoutSec) * time.Second).
 		WithProgramOptions(tea.WithOutput(os.Stderr)).

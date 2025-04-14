@@ -17,7 +17,7 @@ import (
 
 // starNote is a Starlark function to create a TUI note for showing information to the user.
 // def note(title: str, description: str = "", height: int = 0, next: str = "", show_help: bool = True, timeout: float = 0) -> None
-func starNote(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starNote(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		title       string                               // title text
 		description = ""                                 // description text
@@ -47,13 +47,13 @@ func starNote(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple,
 			huh.NewNote().
 				Title(title).
 				Description(description).
-				Height(height).
+				Height(m.getHeight(height)).
 				Next(hasNext).
 				NextLabel(strNext),
 		),
 	).
-		WithTheme(theme).
-		WithKeyMap(keymap).
+		WithTheme(m.theme).
+		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
 		WithTimeout(time.Duration(timeoutSec) * time.Second).
 		Run()
@@ -85,7 +85,7 @@ var spinStyleMap = map[string]spinner.Type{
 
 // starSpinner is a Starlark function to show a spinner with an optional action.
 // def spin(title: str = "Loading", style: str = "dots", action: Callable = None, timeout: float = 1) -> Any
-func starSpinner(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		title      = "Loading..."         // title text
 		style      = "dots"               // spinner style
@@ -175,7 +175,7 @@ var colorFuncMap = map[string]func(string) string{
 
 // starColorize is a Starlark function to colorize a string.
 // def colorize(text: str, color: str = "", pattern: str = "CherryBlossoms", render: str = "Column") -> str
-func starColorize(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		text      string             // text to colorize
 		colorName = ""               // color name
@@ -198,26 +198,26 @@ func starColorize(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tu
 			return none, err
 		}
 		tc := termenv.ColorProfile().FromColor(rc)
-		return starlark.String(termenv.String(text).Foreground(tc).String()), nil
+		styled := termenv.String(text).Foreground(tc).String()
+		return starlark.String(styled), nil
 	}
 
-	// normalize pattern|render key
-	normalizedPattern := normalizePattern(pattern)
-	normalizedRender := normalizeRenderType(render)
-	key := normalizedPattern + "|" + normalizedRender
-	colorFunc, ok := colorFuncMap[key]
+	// otherwise, use pattern
+	normalized := normalizePattern(pattern) + "|" + normalizeRenderType(render)
+	colorFunc, ok := colorFuncMap[strings.ToLower(normalized)]
 	if !ok {
-		return none, fmt.Errorf("%s: unsupported pattern: %s", b.Name(), key)
+		return none, fmt.Errorf("unsupported pattern: %s", pattern)
 	}
-
-	// colorize text
-	return starlark.String(colorFunc(text)), nil
+	result := colorFunc(text)
+	return starlark.String(result), nil
 }
 
+// normalizePattern normalizes the pattern name for use as a key in colorFuncMap.
 func normalizePattern(s string) string {
-	return strings.NewReplacer("_", "", "-", "", "|", "").Replace(strings.ToLower(s))
+	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(s, " ", ""), "-", ""))
 }
 
+// normalizeRenderType normalizes the render type for use as a key in colorFuncMap.
 func normalizeRenderType(s string) string {
 	switch strings.ToLower(s) {
 	case "column", "col", "c":

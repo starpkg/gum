@@ -11,6 +11,7 @@ require (
 	github.com/charmbracelet/huh/spinner v0.0.0-20240821193529-5fd70815c13f
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/muesli/termenv v0.16.0
+	github.com/starpkg/base v0.1.0
 	go.starlark.net v0.0.0-20240123142251-f86470692795
 )
 
@@ -51,3 +52,5 @@ require (
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 )
+
+replace github.com/starpkg/base => ../base
