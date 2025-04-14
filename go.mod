@@ -4,7 +4,6 @@ go 1.18
 
 require (
 	bitbucket.org/ai69/colorlogo v0.1.1
-	bitbucket.org/neiku/hlog v0.1.2
 	github.com/1set/starlet v0.1.3-0.20240812175751-6f896086c469
 	github.com/PureMature/starcli v0.0.0-20241105163207-41a386e397ca
 	github.com/charmbracelet/bubbletea v0.27.0
@@ -13,13 +12,11 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/muesli/termenv v0.16.0
 	go.starlark.net v0.0.0-20240123142251-f86470692795
-	go.uber.org/zap v1.24.0
 )
 
 require (
 	github.com/1set/gut v0.0.0-20201117175203-a82363231997 // indirect
 	github.com/1set/starlight v0.1.2 // indirect
-	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/catppuccin/go v0.2.0 // indirect
@@ -49,8 +46,8 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
+	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 )
