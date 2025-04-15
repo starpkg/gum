@@ -7,7 +7,6 @@ import (
 
 	"bitbucket.org/ai69/colorlogo"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/PureMature/starcli/util"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/charmbracelet/lipgloss"
@@ -193,7 +192,7 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 
 	// if color is set, use it
 	if colorName != "" {
-		rc, err := util.ParseColor(colorName)
+		rc, err := ParseColor(colorName)
 		if err != nil {
 			return none, err
 		}
