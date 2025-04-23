@@ -6,7 +6,7 @@ require (
 	bitbucket.org/ai69/colorlogo v0.1.1
 	github.com/1set/starlet v0.1.3
 	github.com/charmbracelet/bubbletea v0.27.0
-	github.com/charmbracelet/glamour v0.6.0
+	github.com/charmbracelet/glamour v0.7.0
 	github.com/charmbracelet/huh v0.5.3
 	github.com/charmbracelet/huh/spinner v0.0.0-20240821193529-5fd70815c13f
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -18,7 +18,7 @@ require (
 require (
 	github.com/1set/gut v0.0.0-20201117175203-a82363231997 // indirect
 	github.com/1set/starlight v0.1.2 // indirect
-	github.com/alecthomas/chroma v0.10.0 // indirect
+	github.com/alecthomas/chroma/v2 v2.8.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
@@ -41,7 +41,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.21 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.25 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
@@ -52,13 +52,13 @@ require (
 	github.com/spyzhov/ajson v0.9.6 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	github.com/yuin/goldmark v1.5.2 // indirect
-	github.com/yuin/goldmark-emoji v1.0.1 // indirect
+	github.com/yuin/goldmark v1.5.4 // indirect
+	github.com/yuin/goldmark-emoji v1.0.2 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
-	golang.org/x/net v0.0.0-20221002022538-bcab6841153b // indirect
+	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.16.0 // indirect

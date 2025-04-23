@@ -16,20 +16,20 @@ import (
 // def render_md(text: str, title: str = "", style: str = "auto", width: int = 0, height: int = 0, emoji: bool = True, word_wrap: bool = True, show_help: bool = False, next: str = "") -> None
 func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		textMd   = types.StringOrBytes("")            // markdown text to render
-		title    = types.NewNullableStringOrBytes("") // title for the markdown display
-		style    = "auto"                             // style to use (auto, dark, light, notty, or path to custom style)
-		width    = 0                                  // width to wrap text (0 = use module width)
-		height   = 0                                  // height for the note display (0 = use module height)
-		emoji    = true                               // enable emoji support
-		wordWrap = true                               // enable word wrapping
-		showHelp = false                              // show help text
-		wordNext = types.NewNullableStringOrBytes("") // next word for note
+		textMd   = types.StringOrBytes("")                // markdown text to render
+		title    = types.NewNullableStringOrBytes("")     // title for the markdown display
+		style    = types.NewNullableStringOrBytes("auto") // style to use (auto, dark, light, notty, or path to custom style)
+		width    = 0                                      // width to wrap text (0 = use module width)
+		height   = 0                                      // height for the note display (0 = use module height)
+		emoji    = true                                   // enable emoji support
+		wordWrap = true                                   // enable word wrapping
+		showHelp = false                                  // show help text
+		wordNext = types.NewNullableStringOrBytes("")     // next word for note
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"text", &textMd,
 		"title?", title,
-		"style?", &style,
+		"style?", style,
 		"width?", &width,
 		"height?", &height,
 		"emoji?", &emoji,
@@ -46,27 +46,27 @@ func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin
 	}
 	text := textMd.GoString()
 
-	// Configure rendering width
-	actualWidth := m.getWidth(width)
-
 	// Create renderer options
 	opts := []glamour.TermRendererOption{}
 
 	// Handle style
-	normalizedStyle := strings.ToLower(style)
+	styleStr := style.GoString()
+	if style.IsNullOrEmpty() {
+		styleStr = "auto"
+	}
+	normalizedStyle := strings.ToLower(styleStr)
 	if normalizedStyle == "auto" {
 		opts = append(opts, glamour.WithAutoStyle())
-	} else if _, err := os.Stat(style); err == nil {
+	} else if _, err := os.Stat(styleStr); err == nil {
 		// If style is a file path
-		opts = append(opts, glamour.WithStylePath(style))
+		opts = append(opts, glamour.WithStylePath(styleStr))
 	} else {
 		// Try as a standard style name
 		opts = append(opts, glamour.WithStandardStyle(normalizedStyle))
 	}
 
 	// Add other options
-	opts = append(opts, glamour.WithWordWrap(actualWidth))
-
+	opts = append(opts, glamour.WithWordWrap(m.getWidth(width)))
 	if emoji {
 		opts = append(opts, glamour.WithEmoji())
 	}
@@ -96,7 +96,7 @@ func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin
 	hasNext := !wordNext.IsNullOrEmpty()
 	strNext := wordNext.GoString()
 
-	// Always display as a note (like starNote)
+	// Always display as a note
 	err = huh.NewForm(
 		huh.NewGroup(
 			huh.NewNote().
