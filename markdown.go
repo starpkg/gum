@@ -13,21 +13,23 @@ import (
 )
 
 // starRenderMarkdown is a Starlark function to render markdown text to ANSI terminal output.
-// def render_md(text: str, style: str = "auto", width: int = 0, emoji: bool = True, word_wrap: bool = True, show_help: bool = False, next: str = "") -> str
+// def render_md(text: str, style: str = "auto", width: int = 0, height: int = 0, emoji: bool = True, word_wrap: bool = True, show_help: bool = False, next: str = "") -> None
 func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		text     string                               // markdown text to render
+		textMd   = types.NewNullableStringOrBytes("") // markdown text to render
 		style    = "auto"                             // style to use (auto, dark, light, notty, or path to custom style)
 		width    = 0                                  // width to wrap text (0 = use module width)
+		height   = 0                                  // height for the note display (0 = use module height)
 		emoji    = true                               // enable emoji support
 		wordWrap = true                               // enable word wrapping
 		showHelp = false                              // show help text
 		wordNext = types.NewNullableStringOrBytes("") // next word for note
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"text", &text,
+		"text", textMd,
 		"style?", &style,
 		"width?", &width,
+		"height?", &height,
 		"emoji?", &emoji,
 		"word_wrap?", &wordWrap,
 		"show_help?", &showHelp,
@@ -35,6 +37,12 @@ func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin
 	); err != nil {
 		return none, err
 	}
+
+	// Get text content
+	if textMd.IsNullOrEmpty() {
+		return none, fmt.Errorf("text is required and cannot be empty")
+	}
+	text := textMd.GoString()
 
 	// Configure rendering width
 	actualWidth := m.getWidth(width)
@@ -82,35 +90,34 @@ func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin
 		return none, fmt.Errorf("failed to render markdown: %v", err)
 	}
 
-	// If show_help or next is provided, show as a note
+	// Get next button settings
 	hasNext := !wordNext.IsNullOrEmpty()
 	strNext := wordNext.GoString()
-	if showHelp || hasNext {
-		err := huh.NewForm(
-			huh.NewGroup(
-				huh.NewNote().
-					Title("").
-					Description(out).
-					Height(m.getHeight(0)).
-					Next(hasNext).
-					NextLabel(strNext),
-			),
-		).
-			WithTheme(m.theme).
-			WithKeyMap(m.keymap).
-			WithShowHelp(showHelp).
-			Run()
 
-		// Handle no result
-		if err != nil {
-			if ignorableError(err) {
-				return none, nil
-			}
-			return none, err
+	// Always display as a note (like starNote)
+	err = huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("").
+				Description(out).
+				Height(m.getHeight(height)).
+				Next(hasNext).
+				NextLabel(strNext),
+		),
+	).
+		WithTheme(m.theme).
+		WithKeyMap(m.keymap).
+		WithShowHelp(showHelp).
+		Run()
+
+	// Handle no result
+	if err != nil {
+		if ignorableError(err) {
+			return none, nil
 		}
-		return none, nil
+		return none, err
 	}
 
-	// Otherwise return the rendered string
-	return starlark.String(out), nil
+	// Return none to match starNote pattern
+	return none, nil
 }
