@@ -235,14 +235,12 @@ func (m *Module) applyTheme(themeName string) *huh.Theme {
 }
 
 // starSetTheme implements the set_theme function in Starlark.
-// It updates the config option directly via the extension API and then
-// immediately applies the theme change.
+// It updates the config option directly via the extension API and then immediately applies the theme change.
 // Available themes: "base", "base16", "charm", "dracula", "catppuccin"
-// This custom implementation ensures that the theme changes take effect immediately
-// rather than only updating the configuration value.
+// This custom implementation ensures that the theme changes take effect immediately rather than only updating the configuration value.
 func (m *Module) starSetTheme(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	// Extract the theme name
-	var themeName string
+	var themeName starlark.String
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "theme", &themeName); err != nil {
 		return starlark.None, err
 	}
@@ -254,12 +252,12 @@ func (m *Module) starSetTheme(thread *starlark.Thread, b *starlark.Builtin, args
 	}
 
 	// Set the value using Starlark value
-	if err := option.SetValueFromStarlark(starlark.String(themeName)); err != nil {
+	if err := option.SetValueFromStarlark(themeName); err != nil {
 		return starlark.None, fmt.Errorf("failed to set theme: %w", err)
 	}
 
 	// Apply the theme immediately
-	m.theme = m.applyTheme(themeName)
+	m.theme = m.applyTheme(themeName.GoString())
 
 	return starlark.None, nil
 }
