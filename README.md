@@ -243,29 +243,30 @@ Parameters:
 
 Returns None.
 
-#### `render_md(text, style?, width?, emoji?, word_wrap?, show_help?, next?)`
+#### `render_md(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
 
 Renders Markdown content into beautifully formatted terminal output.
 
 Parameters:
 
 - `text`: Markdown text to render (required)
+- `title`: Title for the markdown display (default: "")
 - `style`: Style to use for rendering (default: "auto")
   - Available styles: "auto", "dark", "light", "notty", or path to a custom style JSON file
   - "auto" will detect the terminal's background color
 - `width`: Width to wrap the text at (default: 0 - uses module configuration)
+- `height`: Height of the note component (default: 0 - uses module configuration)
 - `emoji`: Enable emoji support (default: True)
 - `word_wrap`: Enable word wrapping (default: True)
 - `show_help`: Show help text (default: False)
 - `next`: Text for next button (default: "" - no next button)
 
-Returns the rendered markdown as a string when `show_help` and `next` are not specified. Otherwise, displays as a note and returns None.
+Displays rendered markdown as a note and returns None.
 
 Example:
 ```starlark
 load("gum", "render_md")
 
-# Simple rendering, returns string
 md_text = """
 # Hello World
 
@@ -276,11 +277,14 @@ This is **bold** and *italic* text.
 
 > A blockquote
 """
-rendered = render_md(md_text)
-print(rendered)
-
-# Show as a note with a next button
-render_md(md_text, style="dark", show_help=True, next="Continue")
+# Display markdown with a title
+render_md(
+    text = md_text,
+    title = "Documentation Example",
+    style = "dark",
+    show_help = True,
+    next = "Continue"
+)
 ```
 
 #### `spin(title?, style?, action?, timeout?)`
