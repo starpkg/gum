@@ -12,9 +12,9 @@ import (
 	"go.starlark.net/starlark"
 )
 
-// starRenderMarkdown is a Starlark function to render markdown text to ANSI terminal output.
+// starMarkdown is a Starlark function to render markdown text to ANSI terminal output.
 // def md(text: str, title: str = "", style: str = "auto", width: int = 0, height: int = 0, emoji: bool = True, word_wrap: bool = True, show_help: bool = False, next: str = "") -> None
-func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		textMd   = types.StringOrBytes("")                // markdown text to render
 		title    = types.NewNullableStringOrBytes("")     // title for the markdown display

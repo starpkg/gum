@@ -96,7 +96,7 @@ func (m *Module) LoadModule() starlet.ModuleLoader {
 		"spin":         starlark.NewBuiltin(ModuleName+".spin", m.starSpinner),
 		"file_pick":    starlark.NewBuiltin(ModuleName+".file_pick", m.starFilePicker),
 		"colorize":     starlark.NewBuiltin(ModuleName+".colorize", m.starColorize),
-		"md":           starlark.NewBuiltin(ModuleName+".md", m.starRenderMarkdown),
+		"md":           starlark.NewBuiltin(ModuleName+".md", m.starMarkdown),
 		// override the default set_theme function
 		"set_theme": starlark.NewBuiltin(ModuleName+".set_theme", m.starSetTheme),
 	}
