@@ -97,6 +97,7 @@ func (m *Module) LoadModule() starlet.ModuleLoader {
 		"file_pick":    starlark.NewBuiltin(ModuleName+".file_pick", m.starFilePicker),
 		"colorize":     starlark.NewBuiltin(ModuleName+".colorize", m.starColorize),
 		"render_md":    starlark.NewBuiltin(ModuleName+".render_md", m.starRenderMarkdown),
+		"set_theme":    starlark.NewBuiltin(ModuleName+".set_theme", m.starSetTheme),
 	}
 	return m.cfgMod.LoadModule(ModuleName, additionalFuncs)
 }
@@ -109,20 +110,7 @@ func (m *Module) initialize() {
 
 	// Set up theme
 	themeName := m.ext.GetString(configKeyTheme, "charm")
-	switch strings.ToLower(themeName) {
-	case "base":
-		m.theme = huh.ThemeBase()
-	case "base16":
-		m.theme = huh.ThemeBase16()
-	case "charm":
-		m.theme = huh.ThemeCharm()
-	case "dracula":
-		m.theme = huh.ThemeDracula()
-	case "catppuccin":
-		m.theme = huh.ThemeCatppuccin()
-	default: // "charm" is default
-		m.theme = huh.ThemeCharm()
-	}
+	m.theme = m.applyTheme(themeName)
 
 	// Set up keymap
 	m.keymap = huh.NewDefaultKeyMap()
@@ -226,4 +214,52 @@ func convertStringValidator(thread *starlark.Thread, nc *types.NullableCallable)
 
 func convertStringListValidator(thread *starlark.Thread, nc *types.NullableCallable) func([]string) error {
 	return convertValidator[[]string](thread, nc)
+}
+
+// applyTheme applies a theme based on its name.
+func (m *Module) applyTheme(themeName string) *huh.Theme {
+	switch strings.ToLower(themeName) {
+	case "base":
+		return huh.ThemeBase()
+	case "base16":
+		return huh.ThemeBase16()
+	case "charm":
+		return huh.ThemeCharm()
+	case "dracula":
+		return huh.ThemeDracula()
+	case "catppuccin":
+		return huh.ThemeCatppuccin()
+	default: // "charm" is default
+		return huh.ThemeCharm()
+	}
+}
+
+// starSetTheme implements the set_theme function in Starlark.
+// It updates the config option directly via the extension API and then
+// immediately applies the theme change.
+// Available themes: "base", "base16", "charm", "dracula", "catppuccin"
+// This custom implementation ensures that the theme changes take effect immediately
+// rather than only updating the configuration value.
+func (m *Module) starSetTheme(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	// Extract the theme name
+	var themeName string
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "theme", &themeName); err != nil {
+		return starlark.None, err
+	}
+
+	// Find the theme config option
+	option, err := m.cfgMod.GetConfigOption(configKeyTheme)
+	if err != nil {
+		return starlark.None, fmt.Errorf("failed to get theme config option: %w", err)
+	}
+
+	// Set the value using Starlark value
+	if err := option.SetValueFromStarlark(starlark.String(themeName)); err != nil {
+		return starlark.None, fmt.Errorf("failed to set theme: %w", err)
+	}
+
+	// Apply the theme immediately
+	m.theme = m.applyTheme(themeName)
+
+	return starlark.None, nil
 }
