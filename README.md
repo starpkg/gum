@@ -264,6 +264,7 @@ Parameters:
 Displays rendered markdown as a note and returns None.
 
 Example:
+
 ```starlark
 load("gum", "render_md")
 

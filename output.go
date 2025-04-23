@@ -18,22 +18,27 @@ import (
 // def note(title: str, description: str = "", height: int = 0, next: str = "", show_help: bool = True, timeout: float = 0) -> None
 func (m *Module) starNote(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		title       string                               // title text
-		description = ""                                 // description text
+		title       = types.NewNullableStringOrBytes("") // title text
+		description = types.NewNullableStringOrBytes("") // description text
 		height      = 0                                  // maximum number of items to show (0 for all)
 		wordNext    = types.NewNullableStringOrBytes("") // next word
 		showHelp    = true                               // show help key binds
 		timeoutSec  = types.FloatOrInt(0)                // timeout in seconds (0 for no timeout)
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"title", &title,
-		"description?", &description,
+		"title", title,
+		"description?", description,
 		"height?", &height,
 		"next?", wordNext,
 		"show_help?", &showHelp,
 		"timeout?", &timeoutSec,
 	); err != nil {
 		return none, err
+	}
+
+	// Get text content
+	if title.IsNullOrEmpty() {
+		return none, fmt.Errorf("title is required and cannot be empty")
 	}
 
 	// next button
@@ -44,8 +49,8 @@ func (m *Module) starNote(thread *starlark.Thread, b *starlark.Builtin, args sta
 	err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewNote().
-				Title(title).
-				Description(description).
+				Title(title.GoString()).
+				Description(description.GoString()).
 				Height(m.getHeight(height)).
 				Next(hasNext).
 				NextLabel(strNext),
@@ -86,14 +91,14 @@ var spinStyleMap = map[string]spinner.Type{
 // def spin(title: str = "Loading", style: str = "dots", action: Callable = None, timeout: float = 1) -> Any
 func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		title      = "Loading..."         // title text
-		style      = "dots"               // spinner style
-		actionFunc types.NullableCallable // action function
-		timeoutSec = types.FloatOrInt(1)  // timeout in seconds, it won't be used if action is set
+		title      = types.NewNullableStringOrBytes("Loading...") // title text
+		style      = types.NewNullableStringOrBytes("dots")       // spinner style
+		actionFunc types.NullableCallable                         // action function
+		timeoutSec = types.FloatOrInt(1)                          // timeout in seconds, it won't be used if action is set
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"title?", &title,
-		"style?", &style,
+		"title?", title,
+		"style?", style,
 		"action?", &actionFunc,
 		"timeout?", &timeoutSec,
 	); err != nil {
@@ -101,9 +106,9 @@ func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args 
 	}
 
 	// convert spinner style
-	st, ok := spinStyleMap[strings.ToLower(style)]
+	st, ok := spinStyleMap[strings.ToLower(style.GoString())]
 	if !ok {
-		return none, fmt.Errorf("unsupported spinner style: %s", style)
+		return none, fmt.Errorf("unsupported spinner style: %s", style.GoString())
 	}
 
 	// action function
@@ -125,7 +130,7 @@ func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args 
 	// run spinner and action
 	ts := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#00020A", Dark: "#FFFDF5"})
 	err := spinner.New().
-		Title(title).
+		Title(title.GoString()).
 		TitleStyle(ts).
 		Type(st).
 		Action(actFunc).
@@ -176,38 +181,47 @@ var colorFuncMap = map[string]func(string) string{
 // def colorize(text: str, color: str = "", pattern: str = "CherryBlossoms", render: str = "Column") -> str
 func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		text      string             // text to colorize
-		colorName = ""               // color name
-		pattern   = "CherryBlossoms" // color name
-		render    = "Column"         // render type
+		text      = types.NewNullableStringOrBytes("")               // text to colorize
+		colorName = types.NewNullableStringOrBytes("")               // color name
+		pattern   = types.NewNullableStringOrBytes("CherryBlossoms") // color pattern
+		render    = types.NewNullableStringOrBytes("Column")         // render type
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"text", &text,
-		"color?", &colorName,
-		"pattern?", &pattern,
-		"render?", &render,
+		"text", text,
+		"color?", colorName,
+		"pattern?", pattern,
+		"render?", render,
 	); err != nil {
 		return none, err
 	}
 
+	// Get text content
+	if text.IsNullOrEmpty() {
+		return none, fmt.Errorf("text is required and cannot be empty")
+	}
+	textStr := text.GoString()
+
 	// if color is set, use it
-	if colorName != "" {
-		rc, err := ParseColor(colorName)
+	if !colorName.IsNullOrEmpty() {
+		colorStr := colorName.GoString()
+		rc, err := ParseColor(colorStr)
 		if err != nil {
 			return none, err
 		}
 		tc := termenv.ColorProfile().FromColor(rc)
-		styled := termenv.String(text).Foreground(tc).String()
+		styled := termenv.String(textStr).Foreground(tc).String()
 		return starlark.String(styled), nil
 	}
 
 	// otherwise, use pattern
-	normalized := normalizePattern(pattern) + "|" + normalizeRenderType(render)
+	patternStr := pattern.GoString()
+	renderStr := render.GoString()
+	normalized := normalizePattern(patternStr) + "|" + normalizeRenderType(renderStr)
 	colorFunc, ok := colorFuncMap[strings.ToLower(normalized)]
 	if !ok {
-		return none, fmt.Errorf("unsupported pattern: %s", pattern)
+		return none, fmt.Errorf("unsupported pattern: %s", patternStr)
 	}
-	result := colorFunc(text)
+	result := colorFunc(textStr)
 	return starlark.String(result), nil
 }
 
