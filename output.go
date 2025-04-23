@@ -18,7 +18,7 @@ import (
 // def note(title: str, description: str = "", height: int = 0, next: str = "", show_help: bool = True, timeout: float = 0) -> None
 func (m *Module) starNote(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		title       = types.NewNullableStringOrBytes("") // title text
+		title       = types.StringOrBytes("")            // title text
 		description = types.NewNullableStringOrBytes("") // description text
 		height      = 0                                  // maximum number of items to show (0 for all)
 		wordNext    = types.NewNullableStringOrBytes("") // next word
@@ -26,7 +26,7 @@ func (m *Module) starNote(thread *starlark.Thread, b *starlark.Builtin, args sta
 		timeoutSec  = types.FloatOrInt(0)                // timeout in seconds (0 for no timeout)
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"title", title,
+		"title", &title,
 		"description?", description,
 		"height?", &height,
 		"next?", wordNext,
@@ -37,7 +37,7 @@ func (m *Module) starNote(thread *starlark.Thread, b *starlark.Builtin, args sta
 	}
 
 	// Get text content
-	if title.IsNullOrEmpty() {
+	if title.IsEmpty() {
 		return none, fmt.Errorf("title is required and cannot be empty")
 	}
 
@@ -181,13 +181,13 @@ var colorFuncMap = map[string]func(string) string{
 // def colorize(text: str, color: str = "", pattern: str = "CherryBlossoms", render: str = "Column") -> str
 func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		text      = types.NewNullableStringOrBytes("")               // text to colorize
+		text      = types.StringOrBytes("")                          // text to colorize
 		colorName = types.NewNullableStringOrBytes("")               // color name
 		pattern   = types.NewNullableStringOrBytes("CherryBlossoms") // color pattern
 		render    = types.NewNullableStringOrBytes("Column")         // render type
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"text", text,
+		"text", &text,
 		"color?", colorName,
 		"pattern?", pattern,
 		"render?", render,
@@ -196,7 +196,7 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 	}
 
 	// Get text content
-	if text.IsNullOrEmpty() {
+	if text.IsEmpty() {
 		return none, fmt.Errorf("text is required and cannot be empty")
 	}
 	textStr := text.GoString()

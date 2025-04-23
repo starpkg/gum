@@ -16,7 +16,7 @@ import (
 // def render_md(text: str, title: str = "", style: str = "auto", width: int = 0, height: int = 0, emoji: bool = True, word_wrap: bool = True, show_help: bool = False, next: str = "") -> None
 func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		textMd   = types.NewNullableStringOrBytes("") // markdown text to render
+		textMd   = types.StringOrBytes("")            // markdown text to render
 		title    = types.NewNullableStringOrBytes("") // title for the markdown display
 		style    = "auto"                             // style to use (auto, dark, light, notty, or path to custom style)
 		width    = 0                                  // width to wrap text (0 = use module width)
@@ -27,7 +27,7 @@ func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin
 		wordNext = types.NewNullableStringOrBytes("") // next word for note
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"text", textMd,
+		"text", &textMd,
 		"title?", title,
 		"style?", &style,
 		"width?", &width,
@@ -41,7 +41,7 @@ func (m *Module) starRenderMarkdown(thread *starlark.Thread, b *starlark.Builtin
 	}
 
 	// Get text content
-	if textMd.IsNullOrEmpty() {
+	if textMd.IsEmpty() {
 		return none, fmt.Errorf("text is required and cannot be empty")
 	}
 	text := textMd.GoString()
