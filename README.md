@@ -243,7 +243,7 @@ Parameters:
 
 Returns None.
 
-#### `render_md(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
+#### `md(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
 
 Renders Markdown content into beautifully formatted terminal output.
 
@@ -266,7 +266,7 @@ Displays rendered markdown as a note and returns None.
 Example:
 
 ```starlark
-load("gum", "render_md")
+load("gum", "md")
 
 md_text = """
 # Hello World
@@ -279,7 +279,7 @@ This is **bold** and *italic* text.
 > A blockquote
 """
 # Display markdown with a title
-render_md(
+md(
     text = md_text,
     title = "Documentation Example",
     style = "dark",
