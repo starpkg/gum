@@ -43,7 +43,7 @@ type Module struct {
 // NewModule creates a new instance of Module with default configurations.
 func NewModule() *Module {
 	return newModuleWithOptions(
-		genConfigOption(configKeyWidth, "Default width for components", 50),
+		genConfigOption(configKeyWidth, "Default width for components", 50), // (0 for terminal width)
 		genConfigOption(configKeyHeight, "Default height for components", 0),
 		genConfigOption(configKeyTheme, "Theme name to use (base, base16, charm, dracula, catppuccin)", "charm"),
 	)
@@ -93,10 +93,10 @@ func (m *Module) LoadModule() starlet.ModuleLoader {
 		"multi_select": starlark.NewBuiltin(ModuleName+".multi_select", m.starMultiSelect),
 		"confirm":      starlark.NewBuiltin(ModuleName+".confirm", m.starConfirm),
 		"note":         starlark.NewBuiltin(ModuleName+".note", m.starNote),
+		"md":           starlark.NewBuiltin(ModuleName+".md", m.starMarkdown),
 		"spin":         starlark.NewBuiltin(ModuleName+".spin", m.starSpinner),
 		"file_pick":    starlark.NewBuiltin(ModuleName+".file_pick", m.starFilePicker),
 		"colorize":     starlark.NewBuiltin(ModuleName+".colorize", m.starColorize),
-		"md":           starlark.NewBuiltin(ModuleName+".md", m.starMarkdown),
 		// override the default set_theme function
 		"set_theme": starlark.NewBuiltin(ModuleName+".set_theme", m.starSetTheme),
 	}
