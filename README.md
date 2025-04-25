@@ -243,6 +243,51 @@ Parameters:
 
 Returns None.
 
+#### `md(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
+
+Renders Markdown content into beautifully formatted terminal output.
+
+Parameters:
+
+- `text`: Markdown text to render (required)
+- `title`: Title for the markdown display (default: "")
+- `style`: Style to use for rendering (default: "auto")
+  - Available styles: "auto", "dark", "light", "notty", or path to a custom style JSON file
+  - "auto" will detect the terminal's background color
+- `width`: Width to wrap the text at (default: 0 - uses module configuration)
+- `height`: Height of the note component (default: 0 - uses module configuration)
+- `emoji`: Enable emoji support (default: True)
+- `word_wrap`: Enable word wrapping (default: True)
+- `show_help`: Show help text (default: False)
+- `next`: Text for next button (default: "" - no next button)
+
+Displays rendered markdown as a note and returns None.
+
+Example:
+
+```starlark
+load("gum", "md")
+
+md_text = """
+# Hello World
+
+This is **bold** and *italic* text.
+
+* List item 1
+* List item 2
+
+> A blockquote
+"""
+# Display markdown with a title
+md(
+    text = md_text,
+    title = "Documentation Example",
+    style = "dark",
+    show_help = True,
+    next = "Continue"
+)
+```
+
 #### `spin(title?, style?, action?, timeout?)`
 
 Displays a spinner with optional action function.
