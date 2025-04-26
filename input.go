@@ -17,17 +17,18 @@ import (
 // def write(value: str = "", placeholder: str = "Write something...", title: str = "", description: str = "", char_limit: int = 0, validate: Callable = None, width: int = 50, height: int = 5, show_line: bool = false, show_help: bool = true, timeout: float = 0) -> str
 func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		initialValue    starlark.Value         // initial value, converted to string if not already
-		placeholder     = "Write something..." // placeholder value
-		title           = ""                   // title text
-		description     = ""                   // description text
-		charLimit       = 0                    // maximum value length (0 for no limit)
-		validateFunc    types.NullableCallable // validation function
-		width           = 50                   // text area width (0 for terminal width)
-		height          = 5                    // text area height
-		showLineNumbers = false                // show line numbers
-		showHelp        = true                 // show help key binds
-		timeoutSec      = types.FloatOrInt(0)  // timeout in seconds (0 for no timeout)
+		initialValue    starlark.Value                                  // initial value, converted to string if not already
+		placeholder     = "Write something..."                          // placeholder value
+		title           = ""                                            // title text
+		description     = ""                                            // description text
+		charLimit       = 0                                             // maximum value length (0 for no limit)
+		validateFunc    types.NullableCallable                          // validation function
+		editor          = types.NewOneOrManyNoDefault[starlark.Value]() // editor command, editor command and optional arguments
+		width           = 50                                            // text area width (0 for terminal width)
+		height          = 5                                             // text area height
+		showLineNumbers = false                                         // show line numbers
+		showHelp        = true                                          // show help key binds
+		timeoutSec      = types.FloatOrInt(0)                           // timeout in seconds (0 for no timeout)
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"value?", &initialValue,
@@ -36,6 +37,7 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		"description?", &description,
 		"char_limit?", &charLimit,
 		"validate?", &validateFunc,
+		"editor?", editor,
 		"width?", &width,
 		"height?", &height,
 		"show_line?", &showLineNumbers,
@@ -56,6 +58,7 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 				Validate(convertStringValidator(thread, &validateFunc)).
 				CharLimit(charLimit).
 				ShowLineNumbers(showLineNumbers).
+				Editor(convertListString(editor)...).
 				Value(&value),
 		),
 	).

@@ -152,6 +152,26 @@ func convertListString(raw *types.OneOrMany[starlark.Value]) []string {
 	if raw == nil {
 		return nil
 	}
+
+	// If raw contains only one item and it's a string, handle it as a simple editor command
+	if raw.Len() == 1 {
+		val := raw.Slice()[0]
+		if _, ok := val.(starlark.String); ok {
+			return []string{dataconv.StarString(val)}
+		}
+
+		// If the single item is a list, extract its elements as strings
+		if list, ok := val.(*starlark.List); ok && list.Len() > 0 {
+			result := make([]string, list.Len())
+			for i := 0; i < list.Len(); i++ {
+				item := list.Index(i)
+				result[i] = dataconv.StarString(item)
+			}
+			return result
+		}
+	}
+
+	// Standard processing for slice of values
 	ss := make([]string, raw.Len())
 	for i, v := range raw.Slice() {
 		ss[i] = dataconv.StarString(v)

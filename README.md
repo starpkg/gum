@@ -126,7 +126,7 @@ Parameters:
 
 Returns the entered text as a string.
 
-#### `write(value?, placeholder?, title?, description?, char_limit?, validate?, width?, height?, show_line?, show_help?, timeout?)`
+#### `write(value?, placeholder?, title?, description?, char_limit?, validate?, editor?, width?, height?, show_line?, show_help?, timeout?)`
 
 Creates a multi-line text area.
 
@@ -138,6 +138,7 @@ Parameters:
 - `description`: Description text (default: "")
 - `char_limit`: Maximum character limit (default: 0 - no limit)
 - `validate`: Validation function (default: None)
+- `editor`: External editor command string (e.g., "vim") or list (e.g., ["code", "--wait"]) (default: uses $EDITOR or "nano")
 - `width`: Component width (default: configured width)
 - `height`: Component height (default: 5)
 - `show_line`: Show line numbers (default: False)
@@ -353,6 +354,34 @@ if name != None:
         print("Starting process...")
     else:
         print("Maybe next time!")
+```
+
+### External Editor Usage
+
+```python
+load("gum", "write")
+
+# Using default editor (from $EDITOR environment variable)
+notes = write(
+    title = "Meeting Notes",
+    description = "Press Ctrl+E to open in your default editor",
+)
+
+# Specifying a specific editor - VSCode
+vscode_notes = write(
+    title = "VSCode Notes",
+    description = "Press Ctrl+E to open in VSCode",
+    editor = ["code", "--wait"]
+)
+
+# Simple vim editor
+vim_notes = write(
+    title = "Vim Notes",
+    description = "Press Ctrl+E to open in Vim",
+    editor = "vim"
+)
+
+print("Notes recorded:", len(notes) if notes else 0, "characters")
 ```
 
 ### Selection and Multi-selection
