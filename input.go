@@ -23,7 +23,7 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		description     = ""                                             // description text
 		charLimit       = 0                                              // maximum value length (0 for no limit)
 		validateFunc    types.NullableCallable                           // validation function
-		editor          = types.NewOneOrManyNoDefault[starlark.String]() // editor command, editor command and optional arguments
+		editor          = types.NewOneOrManyNoDefault[starlark.String]() // editor command or list of command with arguments
 		width           = 50                                             // text area width (0 for terminal width)
 		height          = 5                                              // text area height
 		showLineNumbers = false                                          // show line numbers
@@ -90,7 +90,7 @@ func (m *Module) starInput(thread *starlark.Thread, b *starlark.Builtin, args st
 		title                               = ""                                             // title text
 		description                         = ""                                             // description text
 		charLimit                           = 0                                              // maximum value length (0 for no limit)
-		suggestions                         = types.NewOneOrManyNoDefault[starlark.String]() // suggestions to display for autocomplete
+		suggestions                         = types.NewOneOrManyNoDefault[starlark.String]() // suggestions as string or list of strings
 		password     starlark.Value         = starlark.Bool(false)                           // password mode
 		validateFunc types.NullableCallable                                                  // validation function
 		width        = 50                                                                    // text area width (0 for terminal width)

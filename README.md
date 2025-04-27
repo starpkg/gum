@@ -208,24 +208,27 @@ Returns a boolean value.
 
 ### File Picker
 
-#### `file_pick(root?, glob?, hidden?, select_dirs?, multi?, title?, width?, height?, show_help?, timeout?)`
+#### `file_pick(path?, title?, description?, validate?, allow_ext?, allow_dir?, allow_file?, show_hidden?, show_perm?, show_size?, height?, show_help?, timeout?)`
 
 Creates a file picker component.
 
 Parameters:
 
-- `root`: Root directory (default: current directory)
-- `glob`: File pattern to match (default: "*")
-- `hidden`: Show hidden files (default: False)
-- `select_dirs`: Allow directory selection (default: False)
-- `multi`: Allow multiple selections (default: False)
-- `title`: Title text (default: "Choose file:")
-- `width`: Component width (default: configured width)
-- `height`: Maximum visible items (default: configured height)
+- `path`: Initial path to start in (default: ".")
+- `title`: Title text (default: "")
+- `description`: Description text (default: "")
+- `validate`: Validation function (default: None)
+- `allow_ext`: Allowed file extensions as string or list of strings (default: [])
+- `allow_dir`: Allow directory selection (default: False)
+- `allow_file`: Allow file selection (default: True)
+- `show_hidden`: Show hidden files (default: False)
+- `show_perm`: Show file permissions (default: True)
+- `show_size`: Show file size (default: False)
+- `height`: Maximum visible items (default: 10)
 - `show_help`: Show help text (default: True)
 - `timeout`: Timeout in seconds (default: 0 - no timeout)
 
-Returns the selected file path(s).
+Returns the selected file path as a string.
 
 ### Visual Elements
 
@@ -428,7 +431,8 @@ load("gum", "file_pick", "spin")
 # Pick a file
 selected_file = file_pick(
     title = "Select a configuration file:",
-    glob = "*.json",
+    allow_ext = ["json"],
+    show_hidden = False,
 )
 
 if selected_file:

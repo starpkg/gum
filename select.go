@@ -90,7 +90,7 @@ func (m *Module) starSelect(thread *starlark.Thread, b *starlark.Builtin, args s
 func (m *Module) starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		options      starlark.Value                                  // list of option values, or map of key-value pairs of options
-		initialValue = types.NewOneOrManyNoDefault[starlark.Value]() // initial value, converted to string if not already
+		initialValue = types.NewOneOrManyNoDefault[starlark.Value]() // initial value as string or list of strings
 		title        = "Choose:"                                     // title text
 		description  = ""                                            // description text
 		validateFunc types.NullableCallable                          // validation function
@@ -258,14 +258,14 @@ func convertOptionList(r starlark.Value) ([]huh.Option[string], error) {
 }
 
 // starFilePicker is a Starlark function to create a TUI file picker for selecting a file or directory.
-// def file_picker(path: str = ".", title: str = "", description: str = "", validate: Callable = None, allow_ext: Union[str, List[str]] = [], allow_dir: bool = False, allow_file: bool = True, show_hidden: bool = False, show_perm: bool = True, show_size: bool = False, height: int = 10, show_help: bool = True, timeout: float = 0) -> str
+// def file_pick(path: str = ".", title: str = "", description: str = "", validate: Callable = None, allow_ext: Union[str, List[str]] = [], allow_dir: bool = False, allow_file: bool = True, show_hidden: bool = False, show_perm: bool = True, show_size: bool = False, height: int = 10, show_help: bool = True, timeout: float = 0) -> str
 func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		initialPath     = "."                                            // initial path string
 		title           = ""                                             // title text
 		description     = ""                                             // description text
 		validateFunc    types.NullableCallable                           // validation function
-		allowExtensions = types.NewOneOrManyNoDefault[starlark.String]() // allowed file extensions
+		allowExtensions = types.NewOneOrManyNoDefault[starlark.String]() // allowed file extensions as string or list of strings
 		allowDirs       = false                                          // allow directories
 		allowFiles      = true                                           // allow files
 		showHidden      = false                                          // show hidden files
