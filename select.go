@@ -127,7 +127,7 @@ func (m *Module) starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, a
 	}
 
 	// convert default values
-	values := convertListString(initialValue)
+	values := convertListToStrings(initialValue)
 
 	// run form
 	err = huh.NewForm(
@@ -261,19 +261,19 @@ func convertOptionList(r starlark.Value) ([]huh.Option[string], error) {
 // def file_picker(path: str = ".", title: str = "", description: str = "", validate: Callable = None, allow_ext: Union[str, List[str]] = [], allow_dir: bool = False, allow_file: bool = True, show_hidden: bool = False, show_perm: bool = True, show_size: bool = False, height: int = 10, show_help: bool = True, timeout: float = 0) -> str
 func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		initialPath     = "."                                           // initial path string
-		title           = ""                                            // title text
-		description     = ""                                            // description text
-		validateFunc    types.NullableCallable                          // validation function
-		allowExtensions = types.NewOneOrManyNoDefault[starlark.Value]() // allowed file extensions
-		allowDirs       = false                                         // allow directories
-		allowFiles      = true                                          // allow files
-		showHidden      = false                                         // show hidden files
-		showPermissions = true                                          // show file permissions
-		showSize        = false                                         // show file size
-		height          = 10                                            // maximum number of items to show (0 for all)
-		showHelp        = true                                          // show help key binds
-		timeoutSec      = types.FloatOrInt(0)                           // timeout in seconds (0 for no timeout)
+		initialPath     = "."                                            // initial path string
+		title           = ""                                             // title text
+		description     = ""                                             // description text
+		validateFunc    types.NullableCallable                           // validation function
+		allowExtensions = types.NewOneOrManyNoDefault[starlark.String]() // allowed file extensions
+		allowDirs       = false                                          // allow directories
+		allowFiles      = true                                           // allow files
+		showHidden      = false                                          // show hidden files
+		showPermissions = true                                           // show file permissions
+		showSize        = false                                          // show file size
+		height          = 10                                             // maximum number of items to show (0 for all)
+		showHelp        = true                                           // show help key binds
+		timeoutSec      = types.FloatOrInt(0)                            // timeout in seconds (0 for no timeout)
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"path?", &initialPath,
@@ -294,7 +294,7 @@ func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, ar
 	}
 
 	// convert allowed extensions
-	extensions := convertListString(allowExtensions)
+	extensions := convertListToStrings(allowExtensions)
 
 	// get initial path
 	path, err := filepath.Abs(initialPath)

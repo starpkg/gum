@@ -148,6 +148,26 @@ func ignorableError(err error) bool {
 	return false
 }
 
+// convertList is a generic function to convert values from a OneOrMany container to a slice of T
+func convertList[T any, V starlark.Value](raw *types.OneOrMany[V], converter func(V) T) []T {
+	if raw == nil {
+		return nil
+	}
+	result := make([]T, raw.Len())
+	for i, v := range raw.Slice() {
+		result[i] = converter(v)
+	}
+	return result
+}
+
+// convertListToStrings converts a OneOrMany of Starlark values to a slice of Go strings
+func convertListToStrings[V starlark.Value](raw *types.OneOrMany[V]) []string {
+	return convertList(raw, func(v V) string {
+		return dataconv.StarString(v)
+	})
+}
+
+// Legacy function to convert a OneOrMany of Starlark values to a slice of Go strings
 func convertListString(raw *types.OneOrMany[starlark.Value]) []string {
 	if raw == nil {
 		return nil
