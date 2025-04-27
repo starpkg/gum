@@ -409,6 +409,7 @@ selected_fruits = multi_select(
         "grape": "Grape 🍇",
         "watermelon": "Watermelon 🍉"
     },
+    value=["Grape 🍇", "Orange 🍊"],
     title = "Select your favorite fruits:",
     limit = 3,
 )
