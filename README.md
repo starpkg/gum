@@ -417,9 +417,12 @@ if name != None:
 ### External Editor Usage
 
 ```python
-load("gum", "write")
+load("gum", "write", "set_editor")
 
-# Using default editor (from $EDITOR environment variable)
+# Set the editor to Vim
+set_editor(["vim"])
+
+# Using default editor of the module
 notes = write(
     title = "Meeting Notes",
     description = "Press Ctrl+E to open in your default editor",
