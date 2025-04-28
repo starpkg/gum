@@ -1,4 +1,9 @@
 // Package gum provides a Starlark module for TUI, inspired charmbracelet/gum, huh and bubbletea.
+// The module supports various configuration options including:
+// - width: Default width for components (0 for terminal width)
+// - height: Default height for components
+// - theme: Theme name to use (base, base16, charm, dracula, catppuccin)
+// - editor: Default editor command for multi-line input (e.g. ["vim", "-f"])
 package gum
 
 import (
@@ -24,6 +29,7 @@ const (
 	configKeyWidth  = "width"
 	configKeyHeight = "height"
 	configKeyTheme  = "theme"
+	configKeyEditor = "editor"
 )
 
 var (
@@ -41,20 +47,32 @@ type Module struct {
 }
 
 // NewModule creates a new instance of Module with default configurations.
+// The default configurations include:
+// - width: 50 (0 for terminal width)
+// - height: 0
+// - theme: "charm"
+// - editor: [] (empty list, no default editor)
 func NewModule() *Module {
 	return newModuleWithOptions(
 		genConfigOption(configKeyWidth, "Default width for components", 50), // (0 for terminal width)
 		genConfigOption(configKeyHeight, "Default height for components", 0),
 		genConfigOption(configKeyTheme, "Theme name to use (base, base16, charm, dracula, catppuccin)", "charm"),
+		genConfigOption(configKeyEditor, "Default editor command (e.g. ['vim', '-f'])", []string{}),
 	)
 }
 
 // NewModuleWithConfig creates a new instance of Module with the given configuration values.
-func NewModuleWithConfig(width, height int, themeName string) *Module {
+// Parameters:
+// - width: Default width for components (0 for terminal width)
+// - height: Default height for components
+// - themeName: Theme name to use (base, base16, charm, dracula, catppuccin)
+// - editor: Default editor command for multi-line input (e.g. ["vim", "-f"])
+func NewModuleWithConfig(width, height int, themeName string, editor []string) *Module {
 	return newModuleWithOptions(
 		genConfigOption(configKeyWidth, "Default width for components with preset value", width),
 		genConfigOption(configKeyHeight, "Default height for components with preset value", height),
 		genConfigOption(configKeyTheme, "Theme name to use with preset value", themeName),
+		genConfigOption(configKeyEditor, "Default editor command with preset value", editor),
 	)
 }
 
@@ -68,11 +86,12 @@ func genConfigOption[T any](name, description string, defaultValue T) *base.Conf
 }
 
 // newModuleWithOptions creates a Module with the given configuration options.
-func newModuleWithOptions(widthOpt *base.ConfigOption[int], heightOpt *base.ConfigOption[int], themeOpt *base.ConfigOption[string]) *Module {
+func newModuleWithOptions(widthOpt *base.ConfigOption[int], heightOpt *base.ConfigOption[int], themeOpt *base.ConfigOption[string], editorOpt *base.ConfigOption[[]string]) *Module {
 	cm, _ := base.NewConfigurableModuleWithConfigOptions(
 		widthOpt,
 		heightOpt,
 		themeOpt,
+		editorOpt,
 	)
 	return &Module{
 		cfgMod: cm,

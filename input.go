@@ -10,11 +10,25 @@ import (
 	"github.com/1set/starlet/dataconv/types"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/starpkg/base"
 	"go.starlark.net/starlark"
 )
 
 // starWrite is a Starlark function to create a TUI text area for getting multi-line input from the user.
-// def write(value: str = "", placeholder: str = "Write something...", title: str = "", description: str = "", char_limit: int = 0, validate: Callable = None, width: int = 50, height: int = 5, show_line: bool = false, show_help: bool = true, timeout: float = 0) -> str
+// def write(value: str = "", placeholder: str = "Write something...", title: str = "", description: str = "", char_limit: int = 0, validate: Callable = None, editor: List[str] = None, width: int = 50, height: int = 5, show_line: bool = false, show_help: bool = true, timeout: float = 0) -> str
+// Parameters:
+// - value: Initial text value
+// - placeholder: Placeholder text when empty
+// - title: Title text
+// - description: Description text
+// - char_limit: Maximum number of characters (0 for no limit)
+// - validate: Validation function that returns error message or None
+// - editor: Editor command as list of strings (e.g. ["vim", "-f"]). If None or empty list, uses the default editor from configuration.
+// - width: Text area width (0 for terminal width)
+// - height: Text area height
+// - show_line: Show line numbers
+// - show_help: Show help key binds
+// - timeout: Timeout in seconds (0 for no timeout)
 func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		initialValue    starlark.Value                                   // initial value, converted to string if not already
@@ -47,6 +61,15 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		return none, err
 	}
 
+	// Get editor command, use default if none provided
+	editorCmd := convertListToStrings(editor)
+	if len(editorCmd) == 0 {
+		// Get default editor from config
+		if val, err := base.GetConfigValue[[]string](m.cfgMod, configKeyEditor); err == nil {
+			editorCmd = val
+		}
+	}
+
 	// run form
 	value := dataconv.StarString(initialValue)
 	err := huh.NewForm(
@@ -58,7 +81,7 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 				Validate(convertStringValidator(thread, &validateFunc)).
 				CharLimit(charLimit).
 				ShowLineNumbers(showLineNumbers).
-				Editor(convertListToStrings(editor)...).
+				Editor(editorCmd...).
 				Value(&value),
 		),
 	).
