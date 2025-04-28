@@ -247,9 +247,64 @@ Parameters:
 
 Returns None.
 
-#### `md(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
+#### `md(text, style?, width?, emoji?, word_wrap?)`
 
-Renders Markdown content into beautifully formatted terminal output.
+Renders Markdown content into beautifully formatted terminal text.
+
+Parameters:
+
+- `text`: Markdown text to render (required)
+- `style`: Style to use for rendering (default: "auto")
+  - Available styles from glamour package:
+    - `"auto"`: Automatically detect terminal background
+    - `"ascii"`: Plain ASCII style
+    - `"dark"`: Dark theme
+    - `"dracula"`: Dracula theme
+    - `"light"`: Light theme
+    - `"notty"`: No TTY style
+    - `"pink"`: Pink theme
+    - Custom style file path (path to a JSON file)
+- `width`: Width to wrap the text at (default: 0 - uses module configuration)
+- `emoji`: Enable emoji support (default: True)
+- `word_wrap`: Enable word wrapping (default: True)
+
+Returns the rendered markdown as a string with ANSI escape codes for formatting.
+
+Example:
+
+```starlark
+load("gum", "md", "note")
+
+md_text = """
+# Hello World
+
+This is **bold** and *italic* text.
+
+* List item 1
+* List item 2
+
+> A blockquote
+"""
+# Render markdown to a string
+rendered_md = md(
+    text = md_text,
+    style = "dark"
+)
+
+# Use the rendered markdown in a note
+note(
+    title = "Documentation Example",
+    description = rendered_md,
+    next = "Continue"
+)
+
+# Or print it directly
+print(rendered_md)
+```
+
+#### `md_note(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
+
+Renders Markdown content and displays it in a TUI note.
 
 Parameters:
 
@@ -270,7 +325,7 @@ Displays rendered markdown as a note and returns None.
 Example:
 
 ```starlark
-load("gum", "md")
+load("gum", "md_note")
 
 md_text = """
 # Hello World
@@ -283,7 +338,7 @@ This is **bold** and *italic* text.
 > A blockquote
 """
 # Display markdown with a title
-md(
+md_note(
     text = md_text,
     title = "Documentation Example",
     style = "dark",

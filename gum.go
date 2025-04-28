@@ -94,6 +94,7 @@ func (m *Module) LoadModule() starlet.ModuleLoader {
 		"confirm":      starlark.NewBuiltin(ModuleName+".confirm", m.starConfirm),
 		"note":         starlark.NewBuiltin(ModuleName+".note", m.starNote),
 		"md":           starlark.NewBuiltin(ModuleName+".md", m.starMarkdown),
+		"md_note":      starlark.NewBuiltin(ModuleName+".md_note", m.starMarkdownNote),
 		"spin":         starlark.NewBuiltin(ModuleName+".spin", m.starSpinner),
 		"file_pick":    starlark.NewBuiltin(ModuleName+".file_pick", m.starFilePicker),
 		"colorize":     starlark.NewBuiltin(ModuleName+".colorize", m.starColorize),
