@@ -362,7 +362,7 @@ Returns the result of the action function or None.
 
 Available spinner styles: "line", "dots", "mini_dot", "jump", "points", "pulse", "globe", "moon", "monkey", "meter", "hamburger", "ellipsis"
 
-#### `colorize(text, color?, pattern?, render?)`
+#### `colorize(text, color?, pattern?, render?, from_color?, to_color?)`
 
 Colorizes text with gradients or solid colors.
 
@@ -372,10 +372,27 @@ Parameters:
 - `color`: Solid color name or hex code (default: "" - use pattern)
 - `pattern`: Color pattern for gradient (default: "CherryBlossoms")
 - `render`: Render type ("Column" or "Line") (default: "Column")
+- `from_color`: Custom gradient start color as hex code (e.g., "#FF5733") (default: "" - use pattern)
+- `to_color`: Custom gradient end color as hex code (e.g., "#33FF57") (default: "" - use pattern)
 
 Returns the colorized text.
 
 Available patterns: "Almost", "Anamnisar", "AnimalCrossing", "BrokenHearts", "CherryBlossoms", "EveningNight", "IbizaSunset", "MiWatch", "Nelson", "OceanSand", "PurpleLove", "RainbowBlue", "RoseWater"
+
+Example with custom gradient:
+
+```python
+load("gum", "colorize")
+
+# Colorize text with a custom gradient
+custom_gradient = colorize(
+    text = "Hello, Starlark!",
+    from_color = "#FF5733",  # Orange-red
+    to_color = "#33FF57",    # Green
+    render = "Column"        # Gradient direction
+)
+print(custom_gradient)
+```
 
 ## Examples
 

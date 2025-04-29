@@ -178,19 +178,24 @@ var colorFuncMap = map[string]func(string) string{
 }
 
 // starColorize is a Starlark function to colorize a string.
-// def colorize(text: str, color: str = "", pattern: str = "CherryBlossoms", render: str = "Column") -> str
+// def colorize(text: str, color: str = "", pattern: str = "CherryBlossoms", render: str = "Column", from_color: str = "", to_color: str = "") -> str
 func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		text      = types.StringOrBytes("")                          // text to colorize
 		colorName = types.NewNullableStringOrBytes("")               // color name
 		pattern   = types.NewNullableStringOrBytes("CherryBlossoms") // color pattern
 		render    = types.NewNullableStringOrBytes("Column")         // render type
+		fromColor = types.NewNullableStringOrBytes("")               // from color for custom gradient
+		toColor   = types.NewNullableStringOrBytes("")               // to color for custom gradient
 	)
+
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"text", &text,
 		"color?", colorName,
 		"pattern?", pattern,
 		"render?", render,
+		"from_color?", fromColor,
+		"to_color?", toColor,
 	); err != nil {
 		return none, err
 	}
@@ -211,6 +216,30 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 		tc := termenv.ColorProfile().FromColor(rc)
 		styled := termenv.String(textStr).Foreground(tc).String()
 		return starlark.String(styled), nil
+	}
+
+	// if from_color and to_color are set, use custom gradient
+	if !fromColor.IsNullOrEmpty() && !toColor.IsNullOrEmpty() {
+		fromColorStr := fromColor.GoString()
+		toColorStr := toColor.GoString()
+		renderStr := render.GoString()
+
+		var result string
+		var err error
+
+		switch normalizeRenderType(renderStr) {
+		case "column":
+			result, err = colorlogo.GradientByColumn(textStr, fromColorStr, toColorStr)
+		case "line":
+			result, err = colorlogo.GradientByLine(textStr, fromColorStr, toColorStr)
+		default:
+			return none, fmt.Errorf("unsupported render type: %s", renderStr)
+		}
+
+		if err != nil {
+			return none, err
+		}
+		return starlark.String(result), nil
 	}
 
 	// otherwise, use pattern
