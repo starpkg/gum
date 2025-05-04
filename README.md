@@ -126,7 +126,7 @@ Parameters:
 
 Returns the entered text as a string.
 
-#### `write(value?, placeholder?, title?, description?, char_limit?, validate?, width?, height?, show_line?, show_help?, timeout?)`
+#### `write(value?, placeholder?, title?, description?, char_limit?, validate?, editor?, width?, height?, show_line?, show_help?, timeout?)`
 
 Creates a multi-line text area.
 
@@ -138,6 +138,7 @@ Parameters:
 - `description`: Description text (default: "")
 - `char_limit`: Maximum character limit (default: 0 - no limit)
 - `validate`: Validation function (default: None)
+- `editor`: External editor command string (e.g., "vim") or list (e.g., ["code", "--wait"]) (default: uses $EDITOR or "nano")
 - `width`: Component width (default: configured width)
 - `height`: Component height (default: 5)
 - `show_line`: Show line numbers (default: False)
@@ -207,24 +208,27 @@ Returns a boolean value.
 
 ### File Picker
 
-#### `file_pick(root?, glob?, hidden?, select_dirs?, multi?, title?, width?, height?, show_help?, timeout?)`
+#### `file_pick(path?, title?, description?, validate?, allow_ext?, allow_dir?, allow_file?, show_hidden?, show_perm?, show_size?, height?, show_help?, timeout?)`
 
 Creates a file picker component.
 
 Parameters:
 
-- `root`: Root directory (default: current directory)
-- `glob`: File pattern to match (default: "*")
-- `hidden`: Show hidden files (default: False)
-- `select_dirs`: Allow directory selection (default: False)
-- `multi`: Allow multiple selections (default: False)
-- `title`: Title text (default: "Choose file:")
-- `width`: Component width (default: configured width)
-- `height`: Maximum visible items (default: configured height)
+- `path`: Initial path to start in (default: ".")
+- `title`: Title text (default: "")
+- `description`: Description text (default: "")
+- `validate`: Validation function (default: None)
+- `allow_ext`: Allowed file extensions as string or list of strings (default: [])
+- `allow_dir`: Allow directory selection (default: False)
+- `allow_file`: Allow file selection (default: True)
+- `show_hidden`: Show hidden files (default: False)
+- `show_perm`: Show file permissions (default: True)
+- `show_size`: Show file size (default: False)
+- `height`: Maximum visible items (default: 10)
 - `show_help`: Show help text (default: True)
 - `timeout`: Timeout in seconds (default: 0 - no timeout)
 
-Returns the selected file path(s).
+Returns the selected file path as a string.
 
 ### Visual Elements
 
@@ -243,9 +247,64 @@ Parameters:
 
 Returns None.
 
-#### `md(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
+#### `md(text, style?, width?, emoji?, word_wrap?)`
 
-Renders Markdown content into beautifully formatted terminal output.
+Renders Markdown content into beautifully formatted terminal text.
+
+Parameters:
+
+- `text`: Markdown text to render (required)
+- `style`: Style to use for rendering (default: "auto")
+  - Available styles from glamour package:
+    - `"auto"`: Automatically detect terminal background
+    - `"ascii"`: Plain ASCII style
+    - `"dark"`: Dark theme
+    - `"dracula"`: Dracula theme
+    - `"light"`: Light theme
+    - `"notty"`: No TTY style
+    - `"pink"`: Pink theme
+    - Custom style file path (path to a JSON file)
+- `width`: Width to wrap the text at (default: 0 - uses module configuration)
+- `emoji`: Enable emoji support (default: True)
+- `word_wrap`: Enable word wrapping (default: True)
+
+Returns the rendered markdown as a string with ANSI escape codes for formatting.
+
+Example:
+
+```starlark
+load("gum", "md", "note")
+
+md_text = """
+# Hello World
+
+This is **bold** and *italic* text.
+
+* List item 1
+* List item 2
+
+> A blockquote
+"""
+# Render markdown to a string
+rendered_md = md(
+    text = md_text,
+    style = "dark"
+)
+
+# Use the rendered markdown in a note
+note(
+    title = "Documentation Example",
+    description = rendered_md,
+    next = "Continue"
+)
+
+# Or print it directly
+print(rendered_md)
+```
+
+#### `md_note(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
+
+Renders Markdown content and displays it in a TUI note.
 
 Parameters:
 
@@ -266,7 +325,7 @@ Displays rendered markdown as a note and returns None.
 Example:
 
 ```starlark
-load("gum", "md")
+load("gum", "md_note")
 
 md_text = """
 # Hello World
@@ -279,7 +338,7 @@ This is **bold** and *italic* text.
 > A blockquote
 """
 # Display markdown with a title
-md(
+md_note(
     text = md_text,
     title = "Documentation Example",
     style = "dark",
@@ -303,7 +362,7 @@ Returns the result of the action function or None.
 
 Available spinner styles: "line", "dots", "mini_dot", "jump", "points", "pulse", "globe", "moon", "monkey", "meter", "hamburger", "ellipsis"
 
-#### `colorize(text, color?, pattern?, render?)`
+#### `colorize(text, color?, pattern?, render?, from_color?, to_color?)`
 
 Colorizes text with gradients or solid colors.
 
@@ -313,10 +372,27 @@ Parameters:
 - `color`: Solid color name or hex code (default: "" - use pattern)
 - `pattern`: Color pattern for gradient (default: "CherryBlossoms")
 - `render`: Render type ("Column" or "Line") (default: "Column")
+- `from_color`: Custom gradient start color as hex code (e.g., "#FF5733") (default: "" - use pattern)
+- `to_color`: Custom gradient end color as hex code (e.g., "#33FF57") (default: "" - use pattern)
 
 Returns the colorized text.
 
 Available patterns: "Almost", "Anamnisar", "AnimalCrossing", "BrokenHearts", "CherryBlossoms", "EveningNight", "IbizaSunset", "MiWatch", "Nelson", "OceanSand", "PurpleLove", "RainbowBlue", "RoseWater"
+
+Example with custom gradient:
+
+```python
+load("gum", "colorize")
+
+# Colorize text with a custom gradient
+custom_gradient = colorize(
+    text = "Hello, Starlark!",
+    from_color = "#FF5733",  # Orange-red
+    to_color = "#33FF57",    # Green
+    render = "Column"        # Gradient direction
+)
+print(custom_gradient)
+```
 
 ## Examples
 
@@ -355,6 +431,37 @@ if name != None:
         print("Maybe next time!")
 ```
 
+### External Editor Usage
+
+```python
+load("gum", "write", "set_editor")
+
+# Set the editor to Vim
+set_editor(["vim"])
+
+# Using default editor of the module
+notes = write(
+    title = "Meeting Notes",
+    description = "Press Ctrl+E to open in your default editor",
+)
+
+# Specifying a specific editor - VSCode
+vscode_notes = write(
+    title = "VSCode Notes",
+    description = "Press Ctrl+E to open in VSCode",
+    editor = ["code", "--wait"]
+)
+
+# Simple vim editor
+vim_notes = write(
+    title = "Vim Notes",
+    description = "Press Ctrl+E to open in Vim",
+    editor = "vim"
+)
+
+print("Notes recorded:", len(notes) if notes else 0, "characters")
+```
+
 ### Selection and Multi-selection
 
 ```python
@@ -377,6 +484,7 @@ selected_fruits = multi_select(
         "grape": "Grape 🍇",
         "watermelon": "Watermelon 🍉"
     },
+    value=["Grape 🍇", "Orange 🍊"],
     title = "Select your favorite fruits:",
     limit = 3,
 )
@@ -399,7 +507,8 @@ load("gum", "file_pick", "spin")
 # Pick a file
 selected_file = file_pick(
     title = "Select a configuration file:",
-    glob = "*.json",
+    allow_ext = ["json"],
+    show_hidden = False,
 )
 
 if selected_file:

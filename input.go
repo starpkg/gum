@@ -10,24 +10,39 @@ import (
 	"github.com/1set/starlet/dataconv/types"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/starpkg/base"
 	"go.starlark.net/starlark"
 )
 
 // starWrite is a Starlark function to create a TUI text area for getting multi-line input from the user.
-// def write(value: str = "", placeholder: str = "Write something...", title: str = "", description: str = "", char_limit: int = 0, validate: Callable = None, width: int = 50, height: int = 5, show_line: bool = false, show_help: bool = true, timeout: float = 0) -> str
+// def write(value: str = "", placeholder: str = "Write something...", title: str = "", description: str = "", char_limit: int = 0, validate: Callable = None, editor: List[str] = None, width: int = 50, height: int = 5, show_line: bool = false, show_help: bool = true, timeout: float = 0) -> str
+// Parameters:
+// - value: Initial text value
+// - placeholder: Placeholder text when empty
+// - title: Title text
+// - description: Description text
+// - char_limit: Maximum number of characters (0 for no limit)
+// - validate: Validation function that returns error message or None
+// - editor: Editor command as list of strings (e.g. ["vim", "-f"]). If None or empty list, uses the default editor from configuration.
+// - width: Text area width (0 for terminal width)
+// - height: Text area height
+// - show_line: Show line numbers
+// - show_help: Show help key binds
+// - timeout: Timeout in seconds (0 for no timeout)
 func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		initialValue    starlark.Value         // initial value, converted to string if not already
-		placeholder     = "Write something..." // placeholder value
-		title           = ""                   // title text
-		description     = ""                   // description text
-		charLimit       = 0                    // maximum value length (0 for no limit)
-		validateFunc    types.NullableCallable // validation function
-		width           = 50                   // text area width (0 for terminal width)
-		height          = 5                    // text area height
-		showLineNumbers = false                // show line numbers
-		showHelp        = true                 // show help key binds
-		timeoutSec      = types.FloatOrInt(0)  // timeout in seconds (0 for no timeout)
+		initialValue    starlark.Value                                   // initial value, converted to string if not already
+		placeholder     = "Write something..."                           // placeholder value
+		title           = ""                                             // title text
+		description     = ""                                             // description text
+		charLimit       = 0                                              // maximum value length (0 for no limit)
+		validateFunc    types.NullableCallable                           // validation function
+		editor          = types.NewOneOrManyNoDefault[starlark.String]() // editor command or list of command with arguments
+		width           = 50                                             // text area width (0 for terminal width)
+		height          = 5                                              // text area height
+		showLineNumbers = false                                          // show line numbers
+		showHelp        = true                                           // show help key binds
+		timeoutSec      = types.FloatOrInt(0)                            // timeout in seconds (0 for no timeout)
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"value?", &initialValue,
@@ -36,6 +51,7 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		"description?", &description,
 		"char_limit?", &charLimit,
 		"validate?", &validateFunc,
+		"editor?", editor,
 		"width?", &width,
 		"height?", &height,
 		"show_line?", &showLineNumbers,
@@ -43,6 +59,15 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		"timeout?", &timeoutSec,
 	); err != nil {
 		return none, err
+	}
+
+	// Get editor command, use default if none provided
+	editorCmd := convertListToStrings(editor)
+	if len(editorCmd) == 0 {
+		// Get default editor from config
+		if val, err := base.GetConfigValue[[]string](m.cfgMod, configKeyEditor); err == nil {
+			editorCmd = val
+		}
 	}
 
 	// run form
@@ -56,6 +81,7 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 				Validate(convertStringValidator(thread, &validateFunc)).
 				CharLimit(charLimit).
 				ShowLineNumbers(showLineNumbers).
+				Editor(editorCmd...).
 				Value(&value),
 		),
 	).
@@ -81,19 +107,19 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 // def input(value: str = "", prompt: str = "> ", placeholder: str = "Type something...", title: str = "", description: str = "", char_limit: int = 0, suggestions: List[str] = [], password: bool = false, validate: Callable = None, width: int = 50, inline: bool = false, show_help: bool = true, timeout: float = 0) -> str
 func (m *Module) starInput(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		initialValue starlark.Value                                                         // initial value, converted to string if not already
-		prompt                              = "> "                                          // prompt text
-		placeholder                         = "Type something..."                           // placeholder value
-		title                               = ""                                            // title text
-		description                         = ""                                            // description text
-		charLimit                           = 0                                             // maximum value length (0 for no limit)
-		suggestions                         = types.NewOneOrManyNoDefault[starlark.Value]() // suggestions to display for autocomplete
-		password     starlark.Value         = starlark.Bool(false)                          // password mode
-		validateFunc types.NullableCallable                                                 // validation function
-		width        = 50                                                                   // text area width (0 for terminal width)
-		inline       = false                                                                // inline mode
-		showHelp     = true                                                                 // show help key binds
-		timeoutSec   = types.FloatOrInt(0)                                                  // timeout in seconds (0 for no timeout)
+		initialValue starlark.Value                                                          // initial value, converted to string if not already
+		prompt                              = "> "                                           // prompt text
+		placeholder                         = "Type something..."                            // placeholder value
+		title                               = ""                                             // title text
+		description                         = ""                                             // description text
+		charLimit                           = 0                                              // maximum value length (0 for no limit)
+		suggestions                         = types.NewOneOrManyNoDefault[starlark.String]() // suggestions as string or list of strings
+		password     starlark.Value         = starlark.Bool(false)                           // password mode
+		validateFunc types.NullableCallable                                                  // validation function
+		width        = 50                                                                    // text area width (0 for terminal width)
+		inline       = false                                                                 // inline mode
+		showHelp     = true                                                                  // show help key binds
+		timeoutSec   = types.FloatOrInt(0)                                                   // timeout in seconds (0 for no timeout)
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"value?", &initialValue,
@@ -129,7 +155,7 @@ func (m *Module) starInput(thread *starlark.Thread, b *starlark.Builtin, args st
 	}
 
 	// convert suggestions
-	suggests := convertListString(suggestions)
+	suggests := convertListToStrings(suggestions)
 
 	// run form
 	value := dataconv.StarString(initialValue)
