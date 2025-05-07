@@ -118,7 +118,7 @@ func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args 
 		actFunc = func() {
 			if actionFunc.IsNull() {
 				// default action: sleep for timeout
-				time.Sleep(time.Duration(timeoutSec) * time.Second)
+				time.Sleep(convertDuration(timeoutSec))
 			} else {
 				// custom action: call and pass through the result and error
 				nt := &starlark.Thread{Name: "spin", Load: thread.Load, Print: thread.Print, OnMaxSteps: thread.OnMaxSteps}
