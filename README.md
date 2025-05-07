@@ -204,7 +204,7 @@ Parameters:
 - `show_help`: Show help text (default: True)
 - `timeout`: Timeout in seconds (default: 0 - no timeout)
 
-Returns a boolean value.
+Returns a boolean value if the user makes a selection, or `None` if the operation is cancelled or times out.
 
 ### File Picker
 

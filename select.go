@@ -168,15 +168,16 @@ func (m *Module) starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, a
 // def confirm(value: bool = False, title: str = "Are you sure?", description: str = "", yes: str = "Yes", no: str = "No", inline: bool = False, show_help: bool = True, timeout: float = 0) -> bool
 func (m *Module) starConfirm(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		initialValue = starlark.Bool(false) // initial value, should be a boolean
-		title        = "Are you sure?"      // title text
-		description  = ""                   // description text
-		wordYes      = "Yes"                // text for affirmative option
-		wordNo       = "No"                 // text for negative option
-		inline       = false                // inline mode
-		showHelp     = true                 // show help key binds
-		timeoutSec   = types.FloatOrInt(0)  // timeout in seconds (0 for no timeout)
+		initialValue = starlark.False      // initial value, false by default
+		title        = "Are you sure?"     // title text
+		description  = ""                  // description text
+		wordYes      = "Yes"               // text for affirmative option
+		wordNo       = "No"                // text for negative option
+		inline       = false               // inline mode
+		showHelp     = true                // show help key binds
+		timeoutSec   = types.FloatOrInt(0) // timeout in seconds (0 for no timeout)
 	)
+
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"value?", &initialValue,
 		"title?", &title,
