@@ -59,7 +59,7 @@ func (m *Module) starNote(thread *starlark.Thread, b *starlark.Builtin, args sta
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle no result

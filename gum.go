@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv"
@@ -243,6 +244,11 @@ func convertStringValidator(thread *starlark.Thread, nc *types.NullableCallable)
 
 func convertStringListValidator(thread *starlark.Thread, nc *types.NullableCallable) func([]string) error {
 	return convertValidator[[]string](thread, nc)
+}
+
+// convertDuration converts a FloatOrInt value to a time.Duration
+func convertDuration(seconds types.FloatOrInt) time.Duration {
+	return time.Duration(seconds.GoFloat() * float64(time.Second))
 }
 
 // applyTheme applies a theme based on its name.
