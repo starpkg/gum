@@ -4,7 +4,6 @@ package gum
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
@@ -90,7 +89,7 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results
@@ -178,7 +177,7 @@ func (m *Module) starInput(thread *starlark.Thread, b *starlark.Builtin, args st
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		WithProgramOptions(tea.WithOutput(os.Stderr)).
 		Run()
 

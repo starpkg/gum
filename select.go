@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
@@ -72,7 +71,7 @@ func (m *Module) starSelect(thread *starlark.Thread, b *starlark.Builtin, args s
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results
@@ -148,7 +147,7 @@ func (m *Module) starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, a
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results
@@ -207,7 +206,7 @@ func (m *Module) starConfirm(thread *starlark.Thread, b *starlark.Builtin, args 
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results
@@ -325,7 +324,7 @@ func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, ar
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results
