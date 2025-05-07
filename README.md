@@ -302,7 +302,7 @@ note(
 print(rendered_md)
 ```
 
-#### `md_note(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
+#### `md_note(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?, timeout?)`
 
 Renders Markdown content and displays it in a TUI note.
 
@@ -319,6 +319,7 @@ Parameters:
 - `word_wrap`: Enable word wrapping (default: True)
 - `show_help`: Show help text (default: False)
 - `next`: Text for next button (default: "" - no next button)
+- `timeout`: Timeout in seconds (default: 0 - no timeout)
 
 Displays rendered markdown as a note and returns None.
 
