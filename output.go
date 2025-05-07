@@ -224,14 +224,25 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 		toColorStr := toColor.GoString()
 		renderStr := render.GoString()
 
-		var result string
-		var err error
+		// Parse the colors to ensure they're in the correct format
+		fromRGB, err := ParseColor(fromColorStr)
+		if err != nil {
+			return none, fmt.Errorf("invalid from_color: %w", err)
+		}
+		fromHex := colorToHex(fromRGB)
 
+		toRGB, err := ParseColor(toColorStr)
+		if err != nil {
+			return none, fmt.Errorf("invalid to_color: %w", err)
+		}
+		toHex := colorToHex(toRGB)
+
+		var result string
 		switch normalizeRenderType(renderStr) {
 		case "column":
-			result, err = colorlogo.GradientByColumn(textStr, fromColorStr, toColorStr)
+			result, err = colorlogo.GradientByColumn(textStr, fromHex, toHex)
 		case "line":
-			result, err = colorlogo.GradientByLine(textStr, fromColorStr, toColorStr)
+			result, err = colorlogo.GradientByLine(textStr, fromHex, toHex)
 		default:
 			return none, fmt.Errorf("unsupported render type: %s", renderStr)
 		}

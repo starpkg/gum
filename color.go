@@ -190,6 +190,13 @@ func ParseColor(query string) (color.Color, error) {
 	return parseColorQuery(query)
 }
 
+// colorToHex converts a color.Color to a hex string format (#RRGGBB)
+func colorToHex(c color.Color) string {
+	r, g, b, _ := c.RGBA()
+	return fmt.Sprintf("#%02X%02X%02X", r>>8, g>>8, b>>8)
+}
+
+// parseColorQuery parses the case-insensitive unstructured description of color and returns the corresponding color.Color.
 func parseColorQuery(query string) (color.Color, error) {
 	// parse
 	for _, key := range colorRegexOrder {
