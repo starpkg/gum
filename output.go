@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"go.starlark.net/starlark"
 )
 
@@ -178,6 +177,17 @@ var colorFuncMap = map[string]func(string) string{
 	"rosewater|line":        colorlogo.RoseWaterByLine,
 }
 
+// toRGBA converts a color.Color to color.RGBA with full opacity
+func toRGBA(c color.Color) color.RGBA {
+	r, g, b, _ := c.RGBA()
+	return color.RGBA{
+		R: uint8(r >> 8),
+		G: uint8(g >> 8),
+		B: uint8(b >> 8),
+		A: 0xFF,
+	}
+}
+
 // starColorize is a Starlark function to colorize a string.
 // def colorize(text: str, color: str = "", pattern: str = "CherryBlossoms", render: str = "Column", from_color: str = "", to_color: str = "") -> str
 func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -214,9 +224,12 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 		if err != nil {
 			return none, err
 		}
-		tc := termenv.ColorProfile().FromColor(rc)
-		styled := termenv.String(textStr).Foreground(tc).String()
-		return starlark.String(styled), nil
+		// Use GradientRender with a single color
+		result, err := colorlogo.GradientRender(textStr, false, toRGBA(rc))
+		if err != nil {
+			return none, err
+		}
+		return starlark.String(result), nil
 	}
 
 	// if from_color and to_color are set, use custom gradient
@@ -239,14 +252,8 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 		// Determine if rendering should be by column
 		byColumn := normalizeRenderType(renderStr) == "column"
 
-		// Convert color.Color to color.RGBA
-		r1, g1, b1, _ := fromRGB.RGBA()
-		fromRGBA := color.RGBA{R: uint8(r1 >> 8), G: uint8(g1 >> 8), B: uint8(b1 >> 8), A: 0xFF}
-		r2, g2, b2, _ := toRGB.RGBA()
-		toRGBA := color.RGBA{R: uint8(r2 >> 8), G: uint8(g2 >> 8), B: uint8(b2 >> 8), A: 0xFF}
-
 		// Use the new GradientRender function that accepts color.RGBA values directly
-		result, err := colorlogo.GradientRender(textStr, byColumn, fromRGBA, toRGBA)
+		result, err := colorlogo.GradientRender(textStr, byColumn, toRGBA(fromRGB), toRGBA(toRGB))
 		if err != nil {
 			return none, err
 		}
