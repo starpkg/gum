@@ -2,6 +2,7 @@ package gum
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -229,24 +230,23 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 		if err != nil {
 			return none, fmt.Errorf("invalid from_color: %w", err)
 		}
-		fromHex := colorToHex(fromRGB)
 
 		toRGB, err := ParseColor(toColorStr)
 		if err != nil {
 			return none, fmt.Errorf("invalid to_color: %w", err)
 		}
-		toHex := colorToHex(toRGB)
 
-		var result string
-		switch normalizeRenderType(renderStr) {
-		case "column":
-			result, err = colorlogo.GradientByColumn(textStr, fromHex, toHex)
-		case "line":
-			result, err = colorlogo.GradientByLine(textStr, fromHex, toHex)
-		default:
-			return none, fmt.Errorf("unsupported render type: %s", renderStr)
-		}
+		// Determine if rendering should be by column
+		byColumn := normalizeRenderType(renderStr) == "column"
 
+		// Convert color.Color to color.RGBA
+		r1, g1, b1, _ := fromRGB.RGBA()
+		fromRGBA := color.RGBA{R: uint8(r1 >> 8), G: uint8(g1 >> 8), B: uint8(b1 >> 8), A: 0xFF}
+		r2, g2, b2, _ := toRGB.RGBA()
+		toRGBA := color.RGBA{R: uint8(r2 >> 8), G: uint8(g2 >> 8), B: uint8(b2 >> 8), A: 0xFF}
+
+		// Use the new GradientRender function that accepts color.RGBA values directly
+		result, err := colorlogo.GradientRender(textStr, byColumn, fromRGBA, toRGBA)
 		if err != nil {
 			return none, err
 		}
