@@ -99,18 +99,19 @@ func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args
 }
 
 // starMarkdownNote is a Starlark function to render markdown text and display it in a TUI note.
-// def md_note(text: str, title: str = "", style: str = "auto", width: int = 0, height: int = 0, emoji: bool = True, word_wrap: bool = True, show_help: bool = False, next: str = "") -> None
+// def md_note(text: str, title: str = "", style: str = "auto", width: int = 0, height: int = 0, emoji: bool = True, word_wrap: bool = True, show_help: bool = False, next: str = "", timeout: float = 0) -> None
 func (m *Module) starMarkdownNote(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		textMd   = types.StringOrBytes("")                // markdown text to render
-		title    = types.NewNullableStringOrBytes("")     // title for the markdown display
-		style    = types.NewNullableStringOrBytes("auto") // style to use (auto, dark, light, notty, or path to custom style)
-		width    = 0                                      // width to wrap text (0 = use module width)
-		height   = 0                                      // height for the note display (0 = use module height)
-		emoji    = true                                   // enable emoji support
-		wordWrap = true                                   // enable word wrapping
-		showHelp = false                                  // show help text
-		wordNext = types.NewNullableStringOrBytes("")     // next word for note
+		textMd     = types.StringOrBytes("")                // markdown text to render
+		title      = types.NewNullableStringOrBytes("")     // title for the markdown display
+		style      = types.NewNullableStringOrBytes("auto") // style to use (auto, dark, light, notty, or path to custom style)
+		width      = 0                                      // width to wrap text (0 = use module width)
+		height     = 0                                      // height for the note display (0 = use module height)
+		emoji      = true                                   // enable emoji support
+		wordWrap   = true                                   // enable word wrapping
+		showHelp   = false                                  // show help text
+		wordNext   = types.NewNullableStringOrBytes("")     // next word for note
+		timeoutSec = types.FloatOrInt(0)                    // timeout in seconds (0 for no timeout)
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"text", &textMd,
@@ -122,6 +123,7 @@ func (m *Module) starMarkdownNote(thread *starlark.Thread, b *starlark.Builtin, 
 		"word_wrap?", &wordWrap,
 		"show_help?", &showHelp,
 		"next?", wordNext,
+		"timeout?", &timeoutSec,
 	); err != nil {
 		return none, err
 	}
@@ -146,6 +148,7 @@ func (m *Module) starMarkdownNote(thread *starlark.Thread, b *starlark.Builtin, 
 		{starlark.String("height"), starlark.MakeInt(height)},
 		{starlark.String("next"), starlark.String(wordNext.GoString())},
 		{starlark.String("show_help"), starlark.Bool(showHelp)},
+		{starlark.String("timeout"), starlark.Float(timeoutSec.GoFloat())},
 	}
 	return m.starNote(thread, b, noteArgs, noteKwargs)
 }

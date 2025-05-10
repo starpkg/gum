@@ -3,7 +3,7 @@ module github.com/starpkg/gum
 go 1.18
 
 require (
-	bitbucket.org/ai69/colorlogo v0.1.1
+	bitbucket.org/ai69/colorlogo v0.1.3
 	github.com/1set/starlet v0.1.3
 	github.com/charmbracelet/bubbletea v0.27.0
 	github.com/charmbracelet/glamour v0.7.0

@@ -204,7 +204,7 @@ Parameters:
 - `show_help`: Show help text (default: True)
 - `timeout`: Timeout in seconds (default: 0 - no timeout)
 
-Returns a boolean value.
+Returns a boolean value if the user makes a selection, or `None` if the operation is cancelled or times out.
 
 ### File Picker
 
@@ -302,7 +302,7 @@ note(
 print(rendered_md)
 ```
 
-#### `md_note(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?)`
+#### `md_note(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?, timeout?)`
 
 Renders Markdown content and displays it in a TUI note.
 
@@ -319,6 +319,7 @@ Parameters:
 - `word_wrap`: Enable word wrapping (default: True)
 - `show_help`: Show help text (default: False)
 - `next`: Text for next button (default: "" - no next button)
+- `timeout`: Timeout in seconds (default: 0 - no timeout)
 
 Displays rendered markdown as a note and returns None.
 

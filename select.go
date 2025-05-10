@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
@@ -72,7 +71,7 @@ func (m *Module) starSelect(thread *starlark.Thread, b *starlark.Builtin, args s
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results
@@ -148,7 +147,7 @@ func (m *Module) starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, a
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results
@@ -169,15 +168,16 @@ func (m *Module) starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, a
 // def confirm(value: bool = False, title: str = "Are you sure?", description: str = "", yes: str = "Yes", no: str = "No", inline: bool = False, show_help: bool = True, timeout: float = 0) -> bool
 func (m *Module) starConfirm(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		initialValue = starlark.Bool(false) // initial value, should be a boolean
-		title        = "Are you sure?"      // title text
-		description  = ""                   // description text
-		wordYes      = "Yes"                // text for affirmative option
-		wordNo       = "No"                 // text for negative option
-		inline       = false                // inline mode
-		showHelp     = true                 // show help key binds
-		timeoutSec   = types.FloatOrInt(0)  // timeout in seconds (0 for no timeout)
+		initialValue = starlark.False      // initial value, false by default
+		title        = "Are you sure?"     // title text
+		description  = ""                  // description text
+		wordYes      = "Yes"               // text for affirmative option
+		wordNo       = "No"                // text for negative option
+		inline       = false               // inline mode
+		showHelp     = true                // show help key binds
+		timeoutSec   = types.FloatOrInt(0) // timeout in seconds (0 for no timeout)
 	)
+
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"value?", &initialValue,
 		"title?", &title,
@@ -207,7 +207,7 @@ func (m *Module) starConfirm(thread *starlark.Thread, b *starlark.Builtin, args 
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results
@@ -325,7 +325,7 @@ func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, ar
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle results

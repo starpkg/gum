@@ -2,6 +2,7 @@ package gum
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"go.starlark.net/starlark"
 )
 
@@ -59,7 +59,7 @@ func (m *Module) starNote(thread *starlark.Thread, b *starlark.Builtin, args sta
 		WithTheme(m.theme).
 		WithKeyMap(m.keymap).
 		WithShowHelp(showHelp).
-		WithTimeout(time.Duration(timeoutSec) * time.Second).
+		WithTimeout(convertDuration(timeoutSec)).
 		Run()
 
 	// handle no result
@@ -118,7 +118,7 @@ func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args 
 		actFunc = func() {
 			if actionFunc.IsNull() {
 				// default action: sleep for timeout
-				time.Sleep(time.Duration(timeoutSec) * time.Second)
+				time.Sleep(convertDuration(timeoutSec))
 			} else {
 				// custom action: call and pass through the result and error
 				nt := &starlark.Thread{Name: "spin", Load: thread.Load, Print: thread.Print, OnMaxSteps: thread.OnMaxSteps}
@@ -149,32 +149,51 @@ func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args 
 }
 
 var colorFuncMap = map[string]func(string) string{
-	"almost|column":         colorlogo.AlmostByColumn,
-	"almost|line":           colorlogo.AlmostByLine,
-	"anamnisar|column":      colorlogo.AnamnisarByColumn,
-	"anamnisar|line":        colorlogo.AnamnisarByLine,
-	"animalcrossing|column": colorlogo.AnimalCrossingByColumn,
-	"animalcrossing|line":   colorlogo.AnimalCrossingByLine,
-	"brokenhearts|column":   colorlogo.BrokenHeartsByColumn,
-	"brokenhearts|line":     colorlogo.BrokenHeartsByLine,
-	"cherryblossoms|column": colorlogo.CherryBlossomsByColumn,
-	"cherryblossoms|line":   colorlogo.CherryBlossomsByLine,
-	"eveningnight|column":   colorlogo.EveningNightByColumn,
-	"eveningnight|line":     colorlogo.EveningNightByLine,
-	"ibizasunset|column":    colorlogo.IbizaSunsetByColumn,
-	"ibizasunset|line":      colorlogo.IbizaSunsetByLine,
-	"miwatch|column":        colorlogo.MiWatchByColumn,
-	"miwatch|line":          colorlogo.MiWatchByLine,
-	"nelson|column":         colorlogo.NelsonByColumn,
-	"nelson|line":           colorlogo.NelsonByLine,
-	"oceansand|column":      colorlogo.OceanSandByColumn,
-	"oceansand|line":        colorlogo.OceanSandByLine,
-	"purplelove|column":     colorlogo.PurpleLoveByColumn,
-	"purplelove|line":       colorlogo.PurpleLoveByLine,
-	"rainbowblue|column":    colorlogo.RainbowBlueByColumn,
-	"rainbowblue|line":      colorlogo.RainbowBlueByLine,
-	"rosewater|column":      colorlogo.RoseWaterByColumn,
-	"rosewater|line":        colorlogo.RoseWaterByLine,
+	"almost|column":          colorlogo.AlmostByColumn,
+	"almost|line":            colorlogo.AlmostByLine,
+	"anamnisar|column":       colorlogo.AnamnisarByColumn,
+	"anamnisar|line":         colorlogo.AnamnisarByLine,
+	"animalcrossing|column":  colorlogo.AnimalCrossingByColumn,
+	"animalcrossing|line":    colorlogo.AnimalCrossingByLine,
+	"brokenhearts|column":    colorlogo.BrokenHeartsByColumn,
+	"brokenhearts|line":      colorlogo.BrokenHeartsByLine,
+	"cherryblossoms|column":  colorlogo.CherryBlossomsByColumn,
+	"cherryblossoms|line":    colorlogo.CherryBlossomsByLine,
+	"eveningnight|column":    colorlogo.EveningNightByColumn,
+	"eveningnight|line":      colorlogo.EveningNightByLine,
+	"eveningsunshine|column": colorlogo.EveningSunshineByColumn,
+	"eveningsunshine|line":   colorlogo.EveningSunshineByLine,
+	"ibizasunset|column":     colorlogo.IbizaSunsetByColumn,
+	"ibizasunset|line":       colorlogo.IbizaSunsetByLine,
+	"miwatch|column":         colorlogo.MiWatchByColumn,
+	"miwatch|line":           colorlogo.MiWatchByLine,
+	"nelson|column":          colorlogo.NelsonByColumn,
+	"nelson|line":            colorlogo.NelsonByLine,
+	"oceansand|column":       colorlogo.OceanSandByColumn,
+	"oceansand|line":         colorlogo.OceanSandByLine,
+	"purplelove|column":      colorlogo.PurpleLoveByColumn,
+	"purplelove|line":        colorlogo.PurpleLoveByLine,
+	"purpleparadise|column":  colorlogo.PurpleParadiseByColumn,
+	"purpleparadise|line":    colorlogo.PurpleParadiseByLine,
+	"rainbowblue|column":     colorlogo.RainbowBlueByColumn,
+	"rainbowblue|line":       colorlogo.RainbowBlueByLine,
+	"relaxingred|column":     colorlogo.RelaxingRedByColumn,
+	"relaxingred|line":       colorlogo.RelaxingRedByLine,
+	"rosewater|column":       colorlogo.RoseWaterByColumn,
+	"rosewater|line":         colorlogo.RoseWaterByLine,
+	"sublimevivid|column":    colorlogo.SublimeVividByColumn,
+	"sublimevivid|line":      colorlogo.SublimeVividByLine,
+}
+
+// toRGBA converts a color.Color to color.RGBA with full opacity
+func toRGBA(c color.Color) color.RGBA {
+	r, g, b, _ := c.RGBA()
+	return color.RGBA{
+		R: uint8(r >> 8),
+		G: uint8(g >> 8),
+		B: uint8(b >> 8),
+		A: 0xFF,
+	}
 }
 
 // starColorize is a Starlark function to colorize a string.
@@ -213,9 +232,12 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 		if err != nil {
 			return none, err
 		}
-		tc := termenv.ColorProfile().FromColor(rc)
-		styled := termenv.String(textStr).Foreground(tc).String()
-		return starlark.String(styled), nil
+		// Use GradientRender with a single color
+		result, err := colorlogo.GradientRender(textStr, false, toRGBA(rc))
+		if err != nil {
+			return none, err
+		}
+		return starlark.String(result), nil
 	}
 
 	// if from_color and to_color are set, use custom gradient
@@ -224,18 +246,22 @@ func (m *Module) starColorize(thread *starlark.Thread, b *starlark.Builtin, args
 		toColorStr := toColor.GoString()
 		renderStr := render.GoString()
 
-		var result string
-		var err error
-
-		switch normalizeRenderType(renderStr) {
-		case "column":
-			result, err = colorlogo.GradientByColumn(textStr, fromColorStr, toColorStr)
-		case "line":
-			result, err = colorlogo.GradientByLine(textStr, fromColorStr, toColorStr)
-		default:
-			return none, fmt.Errorf("unsupported render type: %s", renderStr)
+		// Parse the colors to ensure they're in the correct format
+		fromRGB, err := ParseColor(fromColorStr)
+		if err != nil {
+			return none, fmt.Errorf("invalid from_color: %w", err)
 		}
 
+		toRGB, err := ParseColor(toColorStr)
+		if err != nil {
+			return none, fmt.Errorf("invalid to_color: %w", err)
+		}
+
+		// Determine if rendering should be by column
+		byColumn := normalizeRenderType(renderStr) == "column"
+
+		// Use the new GradientRender function that accepts color.RGBA values directly
+		result, err := colorlogo.GradientRender(textStr, byColumn, toRGBA(fromRGB), toRGBA(toRGB))
 		if err != nil {
 			return none, err
 		}
