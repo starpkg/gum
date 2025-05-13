@@ -3,16 +3,19 @@ package gum
 import (
 	"testing"
 
+	"github.com/1set/starlet"
 	"github.com/starpkg/base"
 )
 
 // TestStarlarkScripts runs Starlark test scripts from the test directory.
 // Scripts with "test-" prefix should succeed, "panic-" prefix should fail.
 func TestStarlarkScripts(t *testing.T) {
-	module := NewModule()
-	moduleLoader := module.LoadModule()
+	// Create a module factory function that returns a fresh module loader for each test
+	moduleFactory := func() starlet.ModuleLoader {
+		return NewModule().LoadModule()
+	}
 	extraModules := []string{"runtime", "go_idiomatic"}
 
 	// Use the helper function from the base package
-	base.RunStarlarkTests(t, ModuleName, moduleLoader, extraModules, "")
+	base.RunStarlarkTests(t, ModuleName, moduleFactory, extraModules, "")
 }
