@@ -1,23 +1,23 @@
 module github.com/starpkg/gum
 
-go 1.18
+go 1.19
 
 require (
 	bitbucket.org/ai69/colorlogo v0.1.3
-	github.com/1set/starlet v0.1.3
+	github.com/1set/starlet v0.2.1
 	github.com/charmbracelet/bubbletea v0.27.0
 	github.com/charmbracelet/glamour v0.7.0
 	github.com/charmbracelet/huh v0.5.3
 	github.com/charmbracelet/huh/spinner v0.0.0-20240821193529-5fd70815c13f
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/muesli/termenv v0.16.0
-	github.com/starpkg/base v0.0.4
-	go.starlark.net v0.0.0-20240123142251-f86470692795
+	github.com/starpkg/base v0.1.0
+	go.starlark.net v0.0.0-20260324133313-ffb3f39dd27a
 )
 
 require (
 	github.com/1set/gut v0.0.0-20201117175203-a82363231997 // indirect
-	github.com/1set/starlight v0.1.2 // indirect
+	github.com/1set/starlight v0.2.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.8.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -49,6 +49,7 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	github.com/spyzhov/ajson v0.9.6 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
