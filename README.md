@@ -1,5 +1,8 @@
 # 🎨 `gum` - Starlark Module for Terminal User Interfaces
 
+[![godoc](https://pkg.go.dev/badge/github.com/starpkg/gum.svg)](https://pkg.go.dev/github.com/starpkg/gum)
+[![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 A powerful Starlark module for building Terminal User Interfaces (TUI), inspired by [charmbracelet/gum](https://github.com/charmbracelet/gum), [huh](https://github.com/charmbracelet/huh), and [bubbletea](https://github.com/charmbracelet/bubbletea). Create beautiful, interactive command-line interfaces in your Starlark scripts.
 
 ## Features
