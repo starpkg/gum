@@ -16,10 +16,14 @@ package gum
 //   - convertOptionList: list/dict/iterable -> huh options (select.go)
 //   - convertValidator: sandboxed validator semantics (gum.go)
 //   - normalizePattern / normalizeRenderType: colorize key building (output.go)
+//   - ignorableError: clean cancellation — abort/timeout -> None (gum.go)
+//   - parseColorQuery malformed components: bad input errors, never wrong (color.go)
 //   - non-TTY builtin error branches: bad args/empty inputs -> clean errors
 //   - backward-compat: NewModule defaults remain the historical surface
 
 import (
+	"errors"
+	"fmt"
 	"image/color"
 	"math"
 	"strings"
@@ -28,6 +32,7 @@ import (
 
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv/types"
+	"github.com/charmbracelet/huh"
 	"go.starlark.net/starlark"
 )
 
@@ -383,6 +388,52 @@ func TestConvertOptionList(t *testing.T) {
 			t.Fatalf("expected 0 options, got %d", len(opts))
 		}
 	})
+
+	t.Run("set uses the generic iterable branch", func(t *testing.T) {
+		// A starlark.Set is neither List nor Dict, so it must fall through to the
+		// generic starlark.Iterable case and stringify each member as key+value.
+		set := starlark.NewSet(2)
+		if err := set.Insert(starlark.String("a")); err != nil {
+			t.Fatal(err)
+		}
+		if err := set.Insert(starlark.MakeInt(7)); err != nil {
+			t.Fatal(err)
+		}
+		opts, err := convertOptionList(set)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(opts) != 2 {
+			t.Fatalf("got %d options, want 2", len(opts))
+		}
+		for _, o := range opts {
+			if o.Key != o.Value {
+				t.Errorf("iterable option key %q != value %q", o.Key, o.Value)
+			}
+		}
+	})
+
+	t.Run("bare string is rejected, not split into chars", func(t *testing.T) {
+		// go-starlark strings are not Iterable, so options="abc" must error
+		// cleanly rather than silently becoming three single-char options.
+		_, err := convertOptionList(starlark.String("abc"))
+		if err == nil {
+			t.Fatal("expected error for string input")
+		}
+		if !strings.Contains(err.Error(), "iterable or mapping") {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if !strings.Contains(err.Error(), "string") {
+			t.Errorf("error should name the offending type, got: %v", err)
+		}
+	})
+
+	t.Run("None is rejected", func(t *testing.T) {
+		_, err := convertOptionList(starlark.None)
+		if err == nil || !strings.Contains(err.Error(), "iterable or mapping") {
+			t.Fatalf("expected iterable/mapping error for None, got %v", err)
+		}
+	})
 }
 
 // --- convertValidator (sandboxed re-entrancy) -------------------------------
@@ -508,6 +559,72 @@ func TestNormalizeRenderType(t *testing.T) {
 		if got := normalizeRenderType(in); got != want {
 			t.Errorf("normalizeRenderType(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// --- ignorableError (Invariant 1: clean cancellation) -----------------------
+
+// TestIgnorableError pins the core of the "no host panic / clean cancellation"
+// invariant: a user Ctrl-C (ErrUserAborted) and a form Timeout (ErrTimeout) are
+// not script errors — they collapse to a graceful None — while any other error
+// must propagate. Wrapped sentinels (errors.Is) must still be recognized so a
+// huh internal wrap of the abort/timeout never leaks out as a hard error.
+func TestIgnorableError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool // true => ignorable (becomes None), false => propagates
+	}{
+		{"nil is ignorable", nil, true},
+		{"user aborted", huh.ErrUserAborted, true},
+		{"timeout", huh.ErrTimeout, true},
+		{"wrapped user aborted", fmt.Errorf("form failed: %w", huh.ErrUserAborted), true},
+		{"wrapped timeout", fmt.Errorf("run: %w", huh.ErrTimeout), true},
+		{"real error propagates", errors.New("could not open a new TTY"), false},
+		{"timeout-unsupported propagates", huh.ErrTimeoutUnsupported, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ignorableError(tt.err); got != tt.want {
+				t.Errorf("ignorableError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- parseColorQuery malformed-component branches ----------------------------
+
+// TestParseColorMalformedComponents exercises the error arms of the hex/rgb
+// reparse: the regex can admit a token whose Sscanf reparse then rejects, and
+// that must surface as a clean "invalid ... color" error, never a wrong color
+// or a panic. (Invariant 3 in spirit: bad input errors, never silently wrong.)
+func TestParseColorMalformedComponents(t *testing.T) {
+	tests := []struct {
+		name   string
+		query  string
+		errSub string
+	}{
+		// A space *before* a comma defeats the "rgb(%d,%d,%d)" Sscanf reparse
+		// (%d skips leading space but the literal ',' does not), so the regex can
+		// admit a token the reparse then rejects — that must be a clean error.
+		{"rgb space before comma", "rgb( 16 , 152 , 43 )", "invalid rgb color"},
+		{"rgb overflow component", "rgb(300,1,1)", "invalid rgb color"},
+		{"hsb hue overflow", "hsb(361,0,0)", "out of range"},
+		{"hsb sat overflow", "hsb(0,101,0)", "out of range"},
+		{"hsb bri overflow", "hsb(0,0,101)", "out of range"},
+		// no recognizable token at all
+		{"garbage", "this is not a color", "no color match"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := ParseColor(tt.query)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got color %v", tt.errSub, c)
+			}
+			if !strings.Contains(err.Error(), tt.errSub) {
+				t.Fatalf("expected error containing %q, got %v", tt.errSub, err)
+			}
+		})
 	}
 }
 
