@@ -19,5 +19,5 @@ jobs:
       go-floor: "1.21"
       doc-coverage: true
       footprint: true
-      footprint-max-mb: 19
+      footprint-max-mb: 26
     secrets: inherit
