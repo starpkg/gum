@@ -7,6 +7,8 @@
 
 A powerful Starlark module for building Terminal User Interfaces (TUI), inspired by [charmbracelet/gum](https://github.com/charmbracelet/gum), [huh](https://github.com/charmbracelet/huh), and [bubbletea](https://github.com/charmbracelet/bubbletea). Create beautiful, interactive command-line interfaces in your Starlark scripts.
 
+## Overview
+
 Within the Star\* ecosystem, **starpkg provides support for necessary local operations plus simple abstractions over common online services, for ease of use.** `gum` is squarely a **local capability**: it drives the host's own terminal — prompts, selections, spinners, Markdown rendering, gradient text — and touches no network service. It is an L4 domain module that depends downward on `starpkg/base` (the module/config system) and `1set/starlet` (the Machine runner), and transitively `1set/starlight` + `go.starlark.net`.
 
 ## Features
@@ -37,546 +39,80 @@ import (
 )
 
 func main() {
-    // Create a new gum module with default settings
+    // Create a new gum module with default settings.
     gumModule := gum.NewModule()
-    
-    // Create a Starlet interpreter with the module
+
+    // Create a Starlet interpreter with the module.
     interpreter := starlet.New(
         starlet.WithModuleLoader("gum", gumModule.LoadModule()),
     )
-    
-    // Run a Starlark script with TUI components
+
+    // Run a Starlark script with TUI components.
     script := `
 load("gum", "input", "select", "confirm")
 
-# Get user input
-name = input(
-    title = "What's your name?",
-    placeholder = "Enter your name"
-)
-
-# Select a favorite color
-color = select(
-    options = ["Red", "Green", "Blue", "Yellow"],
-    title = "Choose your favorite color:"
-)
-
-# Confirm the choices
-confirmed = confirm(
-    title = "Is this information correct?",
-    description = "Name: " + name + "\nColor: " + color
-)
-
-print("Confirmed:", confirmed)
+name = input(title = "What's your name?", placeholder = "Enter your name")
+color = select(options = ["Red", "Green", "Blue"], title = "Choose a color:")
+ok = confirm(title = "Is this correct?", description = "Name: " + name + "\nColor: " + color)
+print("Confirmed:", ok)
 `
-    
-    // Execute the script
+
+    // Execute the script.
     if err := interpreter.ExecScript("example.star", script); err != nil {
         fmt.Println("Error:", err)
     }
 }
 ```
 
-## Configuration
-
-The `gum` module has the following configuration options. Each is read from the
-corresponding environment variable (uppercased and prefixed with `GUM_`) when no
-value is set programmatically.
-
-| Option | Type | Default | Environment Variable | Description |
-|--------|------|---------|---------------------|-------------|
-| `width` | int | 50 | `GUM_WIDTH` | Default width for TUI components (`0` = terminal width) |
-| `height` | int | 0 | `GUM_HEIGHT` | Default height for components (`0` = automatic) |
-| `theme` | string | `charm` | `GUM_THEME` | Theme name to use |
-| `editor` | list of string | `[]` | `GUM_EDITOR` | Default external editor command for `write` (e.g. `["vim", "-f"]`); empty falls back to `huh`'s default (`$EDITOR`, else `nano`) |
-
-Available themes:
-
-- `base`: Minimal, monochrome theme
-- `base16`: Simple 16-color theme
-- `charm`: Default Charm theme
-- `dracula`: Dracula color scheme
-- `catppuccin`: Catppuccin color scheme
-
-### Module Configuration
-
-```go
-// Method 1: With default settings
-module := gum.NewModule()
-
-// Method 2: With custom settings — NewModuleWithConfig(width, height int, themeName string, editor []string)
-module := gum.NewModuleWithConfig(
-    80,                  // Width
-    10,                  // Height
-    "dracula",           // Theme
-    []string{"vim"},     // Default editor command
-)
-```
-
-### Configuration accessors (from `base`)
-
-Every configuration option is also reachable from a script through the
-auto-generated accessors provided by `starpkg/base`: `get_width` / `set_width`,
-`get_height` / `set_height`, `get_theme` / `set_theme`, and `get_editor` /
-`set_editor`. Each `set_*` takes a single value and returns `None`; each `get_*`
-returns the current value. Note that `set_theme` is **overridden by `gum`** so it
-also re-applies the theme immediately (see below).
-
-## Starlark API
-
-### Text Input Functions
-
-#### `input(value?, prompt?, placeholder?, title?, description?, char_limit?, suggestions?, password?, validate?, width?, inline?, show_help?, timeout?)`
-
-Creates a single-line text input field.
-
-Parameters:
-
-- `value`: Initial value (default: "")
-- `prompt`: Input prompt (default: "> ")
-- `placeholder`: Placeholder text (default: "Type something...")
-- `title`: Title text (default: "")
-- `description`: Description text (default: "")
-- `char_limit`: Maximum character limit (default: 0 - no limit)
-- `suggestions`: List of autocomplete suggestions (default: [])
-- `password`: Boolean for password input or `None` for no echo (default: False)
-- `validate`: Validation function (default: None)
-- `width`: Component width (default: configured width)
-- `inline`: Display in inline mode (default: False)
-- `show_help`: Show help text (default: True)
-- `timeout`: Timeout in seconds (default: 0 - no timeout)
-
-Returns the entered text as a string.
-
-#### `write(value?, placeholder?, title?, description?, char_limit?, validate?, editor?, width?, height?, show_line?, show_help?, timeout?)`
-
-Creates a multi-line text area.
-
-Parameters:
-
-- `value`: Initial value (default: "")
-- `placeholder`: Placeholder text (default: "Write something...")
-- `title`: Title text (default: "")
-- `description`: Description text (default: "")
-- `char_limit`: Maximum character limit (default: 0 - no limit)
-- `validate`: Validation function (default: None)
-- `editor`: External editor command as a string (e.g., `"vim"`) or list (e.g., `["code", "--wait"]`). When omitted/empty, falls back to the module's configured `editor`; if that is also empty, `huh` uses its own default (`$EDITOR`, else `nano`)
-- `width`: Component width (default: configured width)
-- `height`: Component height (default: 5)
-- `show_line`: Show line numbers (default: False)
-- `show_help`: Show help text (default: True)
-- `timeout`: Timeout in seconds (default: 0 - no timeout)
-
-Returns the entered text as a string.
-
-### Selection Functions
-
-#### `select(options, value?, title?, description?, validate?, width?, height?, inline?, show_filter?, show_help?, timeout?)`
-
-Creates a single-selection component.
-
-Parameters:
-
-- `options`: List or dictionary of options
-- `value`: Initial selected value (default: "")
-- `title`: Title text (default: "Choose:")
-- `description`: Description text (default: "")
-- `validate`: Validation function (default: None)
-- `width`: Component width (default: configured width)
-- `height`: Maximum visible items (default: 0 - all)
-- `inline`: Display in inline mode (default: False)
-- `show_filter`: Enable filtering (default: False)
-- `show_help`: Show help text (default: True)
-- `timeout`: Timeout in seconds (default: 0 - no timeout)
-
-Returns the selected value as a string.
-
-#### `multi_select(options, value?, title?, description?, validate?, limit?, width?, height?, show_filter?, show_help?, timeout?)`
-
-Creates a multi-selection component.
-
-Parameters:
-
-- `options`: List or dictionary of options
-- `value`: List of initially selected values (default: [])
-- `title`: Title text (default: "Choose:")
-- `description`: Description text (default: "")
-- `validate`: Validation function (default: None)
-- `limit`: Maximum number of selections (default: 0 - no limit)
-- `width`: Component width (default: configured width)
-- `height`: Maximum visible items (default: 0 - all)
-- `show_filter`: Enable filtering (default: False)
-- `show_help`: Show help text (default: True)
-- `timeout`: Timeout in seconds (default: 0 - no timeout)
-
-Returns a list of selected values.
-
-#### `confirm(value?, title?, description?, yes?, no?, inline?, show_help?, timeout?)`
-
-Creates a yes/no confirmation dialog.
-
-Parameters:
-
-- `value`: Initial value (default: False)
-- `title`: Title text (default: "Are you sure?")
-- `description`: Description text (default: "")
-- `yes`: Text for affirmative option (default: "Yes")
-- `no`: Text for negative option (default: "No")
-- `inline`: Display in inline mode (default: False)
-- `show_help`: Show help text (default: True)
-- `timeout`: Timeout in seconds (default: 0 - no timeout)
-
-Returns a boolean value if the user makes a selection, or `None` if the operation is cancelled or times out.
-
-### File Picker
-
-#### `file_pick(path?, title?, description?, validate?, allow_ext?, allow_dir?, allow_file?, show_hidden?, show_perm?, show_size?, height?, show_help?, timeout?)`
-
-Creates a file picker component.
-
-Parameters:
-
-- `path`: Initial path to start in (default: ".")
-- `title`: Title text (default: "")
-- `description`: Description text (default: "")
-- `validate`: Validation function (default: None)
-- `allow_ext`: Allowed file extensions as string or list of strings (default: [])
-- `allow_dir`: Allow directory selection (default: False)
-- `allow_file`: Allow file selection (default: True)
-- `show_hidden`: Show hidden files (default: False)
-- `show_perm`: Show file permissions (default: True)
-- `show_size`: Show file size (default: False)
-- `height`: Maximum visible items (default: 10)
-- `show_help`: Show help text (default: True)
-- `timeout`: Timeout in seconds (default: 0 - no timeout)
-
-Returns the selected file path as a string.
-
-### Visual Elements
-
-#### `note(title, description?, height?, next?, show_help?, timeout?)`
-
-Displays a note with a title and description.
-
-Parameters:
-
-- `title`: Title text (required)
-- `description`: Description text (default: "")
-- `height`: Component height (default: 0 - automatic)
-- `next`: Text for next button (default: "" - no button)
-- `show_help`: Show help text (default: True)
-- `timeout`: Timeout in seconds (default: 0 - no timeout)
-
-Returns None.
-
-#### `md(text, style?, width?, emoji?, word_wrap?)`
-
-Renders Markdown content into beautifully formatted terminal text.
-
-Parameters:
-
-- `text`: Markdown text to render (required)
-- `style`: Style to use for rendering (default: "auto")
-  - Available styles from glamour package:
-    - `"auto"`: Automatically detect terminal background
-    - `"ascii"`: Plain ASCII style
-    - `"dark"`: Dark theme
-    - `"dracula"`: Dracula theme
-    - `"light"`: Light theme
-    - `"notty"`: No TTY style
-    - `"pink"`: Pink theme
-    - Custom style file path (path to a JSON file)
-- `width`: Width to wrap the text at (default: 0 - uses module configuration)
-- `emoji`: Enable emoji support (default: True)
-- `word_wrap`: Enable word wrapping (default: True)
-
-Returns the rendered markdown as a string with ANSI escape codes for formatting.
-
-Example:
-
-```starlark
-load("gum", "md", "note")
-
-md_text = """
-# Hello World
-
-This is **bold** and *italic* text.
-
-* List item 1
-* List item 2
-
-> A blockquote
-"""
-# Render markdown to a string
-rendered_md = md(
-    text = md_text,
-    style = "dark"
-)
-
-# Use the rendered markdown in a note
-note(
-    title = "Documentation Example",
-    description = rendered_md,
-    next = "Continue"
-)
-
-# Or print it directly
-print(rendered_md)
-```
-
-#### `md_note(text, title?, style?, width?, height?, emoji?, word_wrap?, show_help?, next?, timeout?)`
-
-Renders Markdown content and displays it in a TUI note.
-
-Parameters:
-
-- `text`: Markdown text to render (required)
-- `title`: Title for the markdown display (default: "")
-- `style`: Style to use for rendering (default: "auto")
-  - Available styles: "auto", "dark", "light", "notty", or path to a custom style JSON file
-  - "auto" will detect the terminal's background color
-- `width`: Width to wrap the text at (default: 0 - uses module configuration)
-- `height`: Height of the note component (default: 0 - uses module configuration)
-- `emoji`: Enable emoji support (default: True)
-- `word_wrap`: Enable word wrapping (default: True)
-- `show_help`: Show help text (default: False)
-- `next`: Text for next button (default: "" - no next button)
-- `timeout`: Timeout in seconds (default: 0 - no timeout)
-
-Displays rendered markdown as a note and returns None.
-
-Example:
-
-```starlark
-load("gum", "md_note")
-
-md_text = """
-# Hello World
-
-This is **bold** and *italic* text.
-
-* List item 1
-* List item 2
-
-> A blockquote
-"""
-# Display markdown with a title
-md_note(
-    text = md_text,
-    title = "Documentation Example",
-    style = "dark",
-    show_help = True,
-    next = "Continue"
-)
-```
-
-#### `spin(title?, style?, action?, timeout?)`
-
-Displays a spinner with optional action function.
-
-Parameters:
-
-- `title`: Spinner title (default: "Loading...")
-- `style`: Spinner style (default: "dots")
-- `action`: Function to execute while spinner is active (default: None)
-- `timeout`: Timeout in seconds when no action is provided (default: 1)
-
-Returns the result of the action function or None.
-
-Available spinner styles: "line", "dots", "mini_dot", "jump", "points", "pulse", "globe", "moon", "monkey", "meter", "hamburger", "ellipsis"
-
-#### `colorize(text, color?, pattern?, render?, from_color?, to_color?)`
-
-Colorizes text with gradients or solid colors.
-
-Parameters:
-
-- `text`: Text to colorize (required)
-- `color`: Solid color name or hex code (default: "" - use pattern)
-- `pattern`: Color pattern for gradient (default: "CherryBlossoms")
-- `render`: Render type ("Column" or "Line") (default: "Column")
-- `from_color`: Custom gradient start color as hex code (e.g., "#FF5733") (default: "" - use pattern)
-- `to_color`: Custom gradient end color as hex code (e.g., "#33FF57") (default: "" - use pattern)
-
-Returns the colorized text.
-
-The `color`, `from_color`, and `to_color` arguments accept any case-insensitive
-color description understood by the module's parser: a preset name (e.g. `red`,
-`teal`, `lavender`), an `rgb(r, g, b)` triple, an `hsb(h, s, b)` triple, a
-`#RRGGBB` hex code, or a `#RGB` short hex code.
-
-Available patterns: "Almost", "Anamnisar", "AnimalCrossing", "BrokenHearts", "CherryBlossoms", "EveningNight", "EveningSunshine", "IbizaSunset", "MiWatch", "Nelson", "OceanSand", "PurpleLove", "PurpleParadise", "RainbowBlue", "RelaxingRed", "RoseWater", "SublimeVivid"
-
-### Theming
-
-#### `set_theme(theme)`
-
-Sets the active theme and re-applies it immediately, so subsequent components
-render with the new theme within the same script run. This overrides the
-auto-generated `set_theme` accessor from `base` (which would only update the
-stored configuration value).
-
-Parameters:
-
-- `theme`: Theme name — one of `base`, `base16`, `charm`, `dracula`, `catppuccin` (any other value falls back to `charm`)
-
-Returns None.
-
-```python
-load("gum", "set_theme", "select")
-
-set_theme("dracula")
-select(options = ["Red", "Green", "Blue"], title = "Pick a color:")
-```
-
-Example with custom gradient:
-
-```python
-load("gum", "colorize")
-
-# Colorize text with a custom gradient
-custom_gradient = colorize(
-    text = "Hello, Starlark!",
-    from_color = "#FF5733",  # Orange-red
-    to_color = "#33FF57",    # Green
-    render = "Column"        # Gradient direction
-)
-print(custom_gradient)
-```
-
-## Examples
-
-### Basic Input and Confirmation
+A self-contained script example:
 
 ```python
 load("gum", "input", "confirm", "colorize")
 
-# Get user input with validation
 def validate_name(name):
     if len(name) < 3:
         return "Name must be at least 3 characters long"
     return None
 
-name = input(
-    title = "Welcome!",
-    description = "Please enter your name",
-    placeholder = "John Doe",
-    validate = validate_name,
-)
-
+name = input(title = "Welcome!", placeholder = "John Doe", validate = validate_name)
 if name != None:
-    # Colorize output
-    welcome_text = colorize("Hello, " + name + "!", pattern="RainbowBlue")
-    print(welcome_text)
-    
-    # Confirm action
-    if confirm(
-        title = "Would you like to continue?",
-        description = "This will start the process",
-        yes = "Let's go!",
-        no = "Not now",
-    ):
+    print(colorize("Hello, " + name + "!", pattern = "RainbowBlue"))
+    if confirm(title = "Continue?", yes = "Let's go!", no = "Not now"):
         print("Starting process...")
-    else:
-        print("Maybe next time!")
 ```
 
-### External Editor Usage
+## Starlark API at a glance
 
-```python
-load("gum", "write", "set_editor")
+Load builtins with `load("gum", ...)`. Every builtin is listed below; see
+**[`docs/API.md`](docs/API.md)** for the full reference — signatures,
+parameters, returns, errors, and examples.
 
-# Set the editor to Vim
-set_editor(["vim"])
+| Builtin | Summary |
+|---------|---------|
+| `input` | Single-line text input, with validation, suggestions, and password/echo modes. |
+| `write` | Multi-line text area, with optional external editor support. |
+| `select` | Single-selection from a list or dict of options. |
+| `multi_select` | Multi-selection with an optional selection limit. |
+| `confirm` | Yes/No confirmation dialog. |
+| `file_pick` | File/directory picker with extension and visibility filters. |
+| `note` | Display an informational note with a title and description. |
+| `md` | Render Markdown to ANSI terminal text (non-interactive). |
+| `md_note` | Render Markdown and display it in a TUI note. |
+| `spin` | Show a spinner, optionally running an action while it spins. |
+| `colorize` | Colorize text with a solid color or a gradient (non-interactive). |
+| `set_theme` | Set the active theme and re-apply it immediately. |
 
-# Using default editor of the module
-notes = write(
-    title = "Meeting Notes",
-    description = "Press Ctrl+E to open in your default editor",
-)
+> **TTY note.** The interactive builtins drive the host's controlling terminal
+> and fail with `could not open a new TTY` in headless environments (CI,
+> sandboxes). `md` and `colorize` are non-interactive and run anywhere.
 
-# Specifying a specific editor - VSCode
-vscode_notes = write(
-    title = "VSCode Notes",
-    description = "Press Ctrl+E to open in VSCode",
-    editor = ["code", "--wait"]
-)
+## Configuration
 
-# Simple vim editor
-vim_notes = write(
-    title = "Vim Notes",
-    description = "Press Ctrl+E to open in Vim",
-    editor = "vim"
-)
-
-print("Notes recorded:", len(notes) if notes else 0, "characters")
-```
-
-### Selection and Multi-selection
-
-```python
-load("gum", "select", "multi_select", "note")
-
-# Single selection from a list
-color = select(
-    options = ["Red", "Green", "Blue", "Yellow", "Purple"],
-    title = "Choose your favorite color:",
-    description = "This will be used for your profile",
-    show_filter = True,
-)
-
-# Multi-selection from a dictionary
-selected_fruits = multi_select(
-    options = {
-        "apple": "Apple 🍎",
-        "banana": "Banana 🍌",
-        "orange": "Orange 🍊", 
-        "grape": "Grape 🍇",
-        "watermelon": "Watermelon 🍉"
-    },
-    value=["Grape 🍇", "Orange 🍊"],
-    title = "Select your favorite fruits:",
-    limit = 3,
-)
-
-# Display results
-if color and selected_fruits:
-    fruits_str = ", ".join(selected_fruits)
-    note(
-        title = "Your Selections",
-        description = "Color: " + color + "\nFruits: " + fruits_str,
-        next = "Continue",
-    )
-```
-
-### File Picker and Spinner
-
-```python
-load("gum", "file_pick", "spin")
-
-# Pick a file
-selected_file = file_pick(
-    title = "Select a configuration file:",
-    allow_ext = ["json"],
-    show_hidden = False,
-)
-
-if selected_file:
-    # Function to process the file
-    def process_file():
-        # Simulate processing
-        sleep(2)
-        return "File processed successfully!"
-    
-    # Show spinner while processing
-    result = spin(
-        title = "Processing " + selected_file,
-        style = "dots",
-        action = process_file,
-    )
-    
-    print(result)
-```
+The `gum` module is configured through `starpkg/base`: options `width`,
+`height`, `theme`, and `editor`, each with an environment variable
+(`GUM_<KEY>`) and an auto-generated `get_<key>` / `set_<key>` script accessor
+pair. See **[`docs/API.md` → Configuration](docs/API.md#configuration)** for the
+full table and the Go constructors (`NewModule`, `NewModuleWithConfig`).
 
 ## License
 
