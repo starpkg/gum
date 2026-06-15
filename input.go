@@ -1,4 +1,3 @@
-// Package gum provides a Starlark module for TUI, inspired charmbracelet/gum, huh and bubbletea.
 package gum
 
 import (

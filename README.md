@@ -5,6 +5,8 @@
 
 A powerful Starlark module for building Terminal User Interfaces (TUI), inspired by [charmbracelet/gum](https://github.com/charmbracelet/gum), [huh](https://github.com/charmbracelet/huh), and [bubbletea](https://github.com/charmbracelet/bubbletea). Create beautiful, interactive command-line interfaces in your Starlark scripts.
 
+Within the Star\* ecosystem, **starpkg provides support for necessary local operations plus simple abstractions over common online services, for ease of use.** `gum` is squarely a **local capability**: it drives the host's own terminal — prompts, selections, spinners, Markdown rendering, gradient text — and touches no network service. It is an L4 domain module that depends downward on `starpkg/base` (the module/config system) and `1set/starlet` (the Machine runner), and transitively `1set/starlight` + `go.starlark.net`.
+
 ## Features
 
 - **Text Input**: Single and multi-line text inputs with validation
@@ -75,11 +77,16 @@ print("Confirmed:", confirmed)
 
 ## Configuration
 
-The `gum` module has the following configuration options:
+The `gum` module has the following configuration options. Each is read from the
+corresponding environment variable (uppercased and prefixed with `GUM_`) when no
+value is set programmatically.
 
-- `width`: Default width for TUI components (default: 50)
-- `height`: Default height for components (default: 0 - automatic)
-- `theme`: Theme name to use (default: "charm")
+| Option | Type | Default | Environment Variable | Description |
+|--------|------|---------|---------------------|-------------|
+| `width` | int | 50 | `GUM_WIDTH` | Default width for TUI components (`0` = terminal width) |
+| `height` | int | 0 | `GUM_HEIGHT` | Default height for components (`0` = automatic) |
+| `theme` | string | `charm` | `GUM_THEME` | Theme name to use |
+| `editor` | list of string | `[]` | `GUM_EDITOR` | Default external editor command for `write` (e.g. `["vim", "-f"]`); empty falls back to `huh`'s default (`$EDITOR`, else `nano`) |
 
 Available themes:
 
@@ -95,13 +102,23 @@ Available themes:
 // Method 1: With default settings
 module := gum.NewModule()
 
-// Method 2: With custom settings
+// Method 2: With custom settings — NewModuleWithConfig(width, height int, themeName string, editor []string)
 module := gum.NewModuleWithConfig(
-    80,               // Width
-    10,               // Height
-    "dracula",        // Theme
+    80,                  // Width
+    10,                  // Height
+    "dracula",           // Theme
+    []string{"vim"},     // Default editor command
 )
 ```
+
+### Configuration accessors (from `base`)
+
+Every configuration option is also reachable from a script through the
+auto-generated accessors provided by `starpkg/base`: `get_width` / `set_width`,
+`get_height` / `set_height`, `get_theme` / `set_theme`, and `get_editor` /
+`set_editor`. Each `set_*` takes a single value and returns `None`; each `get_*`
+returns the current value. Note that `set_theme` is **overridden by `gum`** so it
+also re-applies the theme immediately (see below).
 
 ## Starlark API
 
@@ -141,7 +158,7 @@ Parameters:
 - `description`: Description text (default: "")
 - `char_limit`: Maximum character limit (default: 0 - no limit)
 - `validate`: Validation function (default: None)
-- `editor`: External editor command string (e.g., "vim") or list (e.g., ["code", "--wait"]) (default: uses $EDITOR or "nano")
+- `editor`: External editor command as a string (e.g., `"vim"`) or list (e.g., `["code", "--wait"]`). When omitted/empty, falls back to the module's configured `editor`; if that is also empty, `huh` uses its own default (`$EDITOR`, else `nano`)
 - `width`: Component width (default: configured width)
 - `height`: Component height (default: 5)
 - `show_line`: Show line numbers (default: False)
@@ -381,7 +398,34 @@ Parameters:
 
 Returns the colorized text.
 
-Available patterns: "Almost", "Anamnisar", "AnimalCrossing", "BrokenHearts", "CherryBlossoms", "EveningNight", "IbizaSunset", "MiWatch", "Nelson", "OceanSand", "PurpleLove", "RainbowBlue", "RoseWater"
+The `color`, `from_color`, and `to_color` arguments accept any case-insensitive
+color description understood by the module's parser: a preset name (e.g. `red`,
+`teal`, `lavender`), an `rgb(r, g, b)` triple, an `hsb(h, s, b)` triple, a
+`#RRGGBB` hex code, or a `#RGB` short hex code.
+
+Available patterns: "Almost", "Anamnisar", "AnimalCrossing", "BrokenHearts", "CherryBlossoms", "EveningNight", "EveningSunshine", "IbizaSunset", "MiWatch", "Nelson", "OceanSand", "PurpleLove", "PurpleParadise", "RainbowBlue", "RelaxingRed", "RoseWater", "SublimeVivid"
+
+### Theming
+
+#### `set_theme(theme)`
+
+Sets the active theme and re-applies it immediately, so subsequent components
+render with the new theme within the same script run. This overrides the
+auto-generated `set_theme` accessor from `base` (which would only update the
+stored configuration value).
+
+Parameters:
+
+- `theme`: Theme name — one of `base`, `base16`, `charm`, `dracula`, `catppuccin` (any other value falls back to `charm`)
+
+Returns None.
+
+```python
+load("gum", "set_theme", "select")
+
+set_theme("dracula")
+select(options = ["Red", "Green", "Blue"], title = "Pick a color:")
+```
 
 Example with custom gradient:
 
