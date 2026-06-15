@@ -34,7 +34,7 @@ var (
 	ColorIndigo = color.RGBA{R: 0x4B, G: 0x00, B: 0x82, A: 0xFF}
 	// ColorLavender is a predefined color, it's a light purple color similar to lavender flowers, having the RGB values #E6E6FA
 	ColorLavender = color.RGBA{R: 0xE6, G: 0xE6, B: 0xFA, A: 0xFF}
-	// ColorLime is a predefined color, which is a fluorescent green, having the RGB values #00FF00
+	// ColorLime is a predefined color, which is a medium green, having the RGB values #008000
 	ColorLime = color.RGBA{R: 0x00, G: 0x80, B: 0x00, A: 0xFF}
 	// ColorMagenta is a predefined color (a.k.a. Fuchsia), which is a mix of red and blue, having the RGB values #FF00FF
 	ColorMagenta = color.RGBA{R: 0xFF, G: 0x00, B: 0xFF, A: 0xFF}

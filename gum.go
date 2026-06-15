@@ -1,9 +1,14 @@
-// Package gum provides a Starlark module for TUI, inspired charmbracelet/gum, huh and bubbletea.
-// The module supports various configuration options including:
-// - width: Default width for components (0 for terminal width)
-// - height: Default height for components
-// - theme: Theme name to use (base, base16, charm, dracula, catppuccin)
-// - editor: Default editor command for multi-line input (e.g. ["vim", "-f"])
+// Package gum provides a Starlark module for building terminal user interfaces
+// (TUI), inspired by charmbracelet/gum, huh, and bubbletea. Scripts can prompt
+// for text, choose from lists, confirm actions, pick files, show spinners and
+// notes, render Markdown, and colorize text — all driving the host's own
+// terminal, with no network access.
+//
+// The module supports the following configuration options:
+//   - width: default width for components (0 for terminal width)
+//   - height: default height for components
+//   - theme: theme name to use (base, base16, charm, dracula, catppuccin)
+//   - editor: default editor command for multi-line input (e.g. ["vim", "-f"])
 package gum
 
 import (

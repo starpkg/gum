@@ -88,7 +88,7 @@ var spinStyleMap = map[string]spinner.Type{
 }
 
 // starSpinner is a Starlark function to show a spinner with an optional action.
-// def spin(title: str = "Loading", style: str = "dots", action: Callable = None, timeout: float = 1) -> Any
+// def spin(title: str = "Loading...", style: str = "dots", action: Callable = None, timeout: float = 1) -> Any
 func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		title      = types.NewNullableStringOrBytes("Loading...") // title text

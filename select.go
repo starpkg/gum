@@ -106,7 +106,7 @@ func (m *Module) starMultiSelect(thread *starlark.Thread, b *starlark.Builtin, a
 		"title?", &title,
 		"description?", &description,
 		"validate?", &validateFunc,
-		"limit", &limit,
+		"limit?", &limit,
 		"width?", &width,
 		"height?", &height,
 		"show_filter?", &showFilter,
