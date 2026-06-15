@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -175,7 +177,12 @@ func initRegex() {
 	colorRegexOrder = []string{"name", "rgb", "hsb", "hex6", "hex3"}
 }
 
-// ParseColor parses the case-insensitive unstructured description of color and returns the corresponding color.Color.
+// ParseColor parses the case-insensitive unstructured description of color and
+// returns the corresponding color.Color. It recognizes, in priority order, a
+// preset color name (e.g. "red"), an "rgb(r, g, b)" triple (each component
+// 0-255), an "hsb(h, s, b)" triple (h 0-360, s and b 0-100), a "#RRGGBB" hex
+// code, or a "#RGB" short hex code. A blank query, an unrecognized description,
+// or an out-of-range component returns an error rather than a wrong color.
 func ParseColor(query string) (color.Color, error) {
 	// init regex
 	regexOnce.Do(initRegex)
@@ -237,7 +244,57 @@ func parseColorQuery(query string) (color.Color, error) {
 				return nil, fmt.Errorf("invalid rgb color: %s - %w", val, err)
 			}
 			return color.RGBA{R: r, G: g, B: b, A: 0xff}, nil
+		case "hsb":
+			// h in [0,360], s and b (a.k.a. value) in [0,100]; values out of
+			// range error rather than silently wrapping or corrupting.
+			h, err := strconv.Atoi(m[1])
+			if err != nil {
+				return nil, fmt.Errorf("invalid hsb color: %s - %w", m[0], err)
+			}
+			s, err := strconv.Atoi(m[2])
+			if err != nil {
+				return nil, fmt.Errorf("invalid hsb color: %s - %w", m[0], err)
+			}
+			bv, err := strconv.Atoi(m[3])
+			if err != nil {
+				return nil, fmt.Errorf("invalid hsb color: %s - %w", m[0], err)
+			}
+			if h > 360 || s > 100 || bv > 100 {
+				return nil, fmt.Errorf("invalid hsb color: %s - values out of range (h<=360, s<=100, b<=100)", m[0])
+			}
+			return hsbToRGBA(float64(h), float64(s), float64(bv)), nil
 		}
 	}
 	return nil, errNoColorMatch
+}
+
+// hsbToRGBA converts an HSB/HSV color (h in [0,360], s and b in [0,100]) to an
+// opaque color.RGBA.
+func hsbToRGBA(h, s, b float64) color.RGBA {
+	s /= 100
+	b /= 100
+	c := b * s
+	x := c * (1 - math.Abs(math.Mod(h/60, 2)-1))
+	mm := b - c
+	var r, g, bl float64
+	switch {
+	case h < 60:
+		r, g, bl = c, x, 0
+	case h < 120:
+		r, g, bl = x, c, 0
+	case h < 180:
+		r, g, bl = 0, c, x
+	case h < 240:
+		r, g, bl = 0, x, c
+	case h < 300:
+		r, g, bl = x, 0, c
+	default: // h in [300,360]
+		r, g, bl = c, 0, x
+	}
+	return color.RGBA{
+		R: uint8(math.Round((r + mm) * 255)),
+		G: uint8(math.Round((g + mm) * 255)),
+		B: uint8(math.Round((bl + mm) * 255)),
+		A: 0xff,
+	}
 }
