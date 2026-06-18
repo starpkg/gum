@@ -4,14 +4,14 @@ go 1.21
 
 require (
 	bitbucket.org/ai69/colorlogo v0.1.3
-	github.com/1set/starlet v0.2.1
+	github.com/1set/starlet v0.2.2
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/charmbracelet/huh v0.6.0
 	github.com/charmbracelet/huh/spinner v0.0.0-20240821193529-5fd70815c13f
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/muesli/termenv v0.16.0
-	github.com/starpkg/base v0.1.0
+	github.com/starpkg/base v0.1.1
 	go.starlark.net v0.0.0-20260324133313-ffb3f39dd27a
 )
 
