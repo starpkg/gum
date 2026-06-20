@@ -64,7 +64,7 @@ Three layers must stay in sync (enforced by the doc standard, `plan/starpkg文�
 
 ## Release discipline
 
-- **Floor = go 1.21**, following this repo's `go.mod` (raised only in its own pin PR / SEP, never incidentally). The Charm stack (`bubbletea` v1.3.x, `huh` v0.6.x, `glamour` v0.8.x, `lipgloss` v1.1.x) sets the practical floor.
+- **Floor = go 1.25**, following this repo's `go.mod` (raised only in its own pin PR / SEP, never incidentally). gum is the ecosystem's **go-1.25 exception**: the Charm **v2** stack (`charm.land/bubbletea/v2`, `huh/v2`, `glamour/v2`, `lipgloss/v2`) declares `go 1.25.8` (huh/glamour), forcing the floor — every other Star\* repo stays on its own lower floor. The v2 migration and the floor rise are the same PR. Because the floor (1.25) coincides with the latest stable, the CI matrix's floor leg and latest leg are both `1.25.x`.
 - **CI** runs via the centralized reusable workflow in `1set/meta` (`go-ci.yml`, pinned by commit SHA), matrix `floor + latest stable`, with `doc-coverage: true` wired in `.github/workflows/build.yml`.
 - **Codacy note:** the `agent-rules` analyzer currently rejects `CLAUDE.md`; that gate is being disabled org-wide, so a red Codacy check on this file is expected and not a blocker — every other check (tests, doc-coverage) must be green.
 - **Bumping the version, the go floor, or tagging are user-confirmed actions** — never tag autonomously; default to patch bumps; published tags are immutable.

@@ -30,9 +30,9 @@ import (
 	"testing"
 	"time"
 
+	huh "charm.land/huh/v2"
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/charmbracelet/huh"
 	"go.starlark.net/starlark"
 )
 

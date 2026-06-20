@@ -5,22 +5,22 @@ import (
 	"os"
 	"strings"
 
+	glamour "charm.land/glamour/v2"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/charmbracelet/glamour"
-	"github.com/muesli/termenv"
 	"go.starlark.net/starlark"
 )
 
 // starMarkdown is a Starlark function to render markdown text to ANSI terminal output.
 // def md(text: str, style: str = "auto", width: int = 0, emoji: bool = True, word_wrap: bool = True) -> str
 // Available styles from glamour package:
-// - "auto": Automatically detect terminal background
+// - "auto": Default dark theme (glamour v2 no longer probes the terminal)
 // - "ascii": Plain ASCII style
 // - "dark": Dark theme
 // - "dracula": Dracula theme
 // - "light": Light theme
 // - "notty": No TTY style
 // - "pink": Pink theme
+// - "tokyo-night": Tokyo Night theme
 // - Custom style file path
 func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
@@ -56,7 +56,12 @@ func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args
 	}
 	normalizedStyle := strings.ToLower(styleStr)
 	if normalizedStyle == "auto" {
-		opts = append(opts, glamour.WithAutoStyle())
+		// glamour v2 removed WithAutoStyle and no longer probes the terminal
+		// (the renderer is now "pure"). Map "auto" to glamour v2's documented
+		// default, "dark"; a light terminal can pass style="light" explicitly.
+		// Probing the background here would block md() on a non-TTY — it hung
+		// the Windows CI leg for 10 minutes — and md() only returns a string.
+		opts = append(opts, glamour.WithStandardStyle("dark"))
 	} else if _, err := os.Stat(styleStr); err == nil {
 		// If style is a file path
 		opts = append(opts, glamour.WithStylePath(styleStr))
@@ -73,14 +78,9 @@ func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args
 		opts = append(opts, glamour.WithEmoji())
 	}
 
-	// Determine color profile based on terminal capabilities
-	if termenv.ColorProfile() == termenv.TrueColor {
-		opts = append(opts, glamour.WithColorProfile(termenv.TrueColor))
-	} else if termenv.ColorProfile() == termenv.ANSI256 {
-		opts = append(opts, glamour.WithColorProfile(termenv.ANSI256))
-	} else {
-		opts = append(opts, glamour.WithColorProfile(termenv.ANSI))
-	}
+	// glamour v2 is "pure": it always emits full-color ANSI and no longer
+	// accepts a WithColorProfile downgrade hint (removed upstream). Color
+	// downsampling for limited terminals now happens at print time, not here.
 
 	// Create the renderer
 	r, err := glamour.NewTermRenderer(opts...)

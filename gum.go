@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
+	huh "charm.land/huh/v2"
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/charmbracelet/huh"
 	"github.com/starpkg/base"
 	"go.starlark.net/starlark"
 )
@@ -47,7 +47,7 @@ var (
 type Module struct {
 	cfgMod  *base.ConfigurableModule
 	ext     *base.ConfigurableModuleExt
-	theme   *huh.Theme
+	theme   huh.Theme
 	keymap  *huh.KeyMap
 	isReady bool
 }
@@ -257,20 +257,26 @@ func convertDuration(seconds types.FloatOrInt) time.Duration {
 }
 
 // applyTheme applies a theme based on its name.
-func (m *Module) applyTheme(themeName string) *huh.Theme {
+//
+// huh v2 made Theme an interface and turned the theme constructors into
+// huh.ThemeFunc-shaped funcs (func(isDark bool) *huh.Styles). We store the
+// constructor wrapped in huh.ThemeFunc and let huh resolve light/dark per run
+// from the terminal background — this both compiles and keeps the historical
+// "charm, looks right on a dark terminal" default without any manual detection.
+func (m *Module) applyTheme(themeName string) huh.Theme {
 	switch strings.ToLower(themeName) {
 	case "base":
-		return huh.ThemeBase()
+		return huh.ThemeFunc(huh.ThemeBase)
 	case "base16":
-		return huh.ThemeBase16()
+		return huh.ThemeFunc(huh.ThemeBase16)
 	case "charm":
-		return huh.ThemeCharm()
+		return huh.ThemeFunc(huh.ThemeCharm)
 	case "dracula":
-		return huh.ThemeDracula()
+		return huh.ThemeFunc(huh.ThemeDracula)
 	case "catppuccin":
-		return huh.ThemeCatppuccin()
+		return huh.ThemeFunc(huh.ThemeCatppuccin)
 	default: // "charm" is default
-		return huh.ThemeCharm()
+		return huh.ThemeFunc(huh.ThemeCharm)
 	}
 }
 
