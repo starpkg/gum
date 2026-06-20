@@ -7,6 +7,7 @@ import (
 
 	glamour "charm.land/glamour/v2"
 	"github.com/1set/starlet/dataconv/types"
+	"github.com/alecthomas/chroma/v2/quick"
 	"go.starlark.net/starlark"
 )
 
@@ -151,4 +152,36 @@ func (m *Module) starMarkdownNote(thread *starlark.Thread, b *starlark.Builtin, 
 		{starlark.String("timeout"), starlark.Float(timeoutSec.GoFloat())},
 	}
 	return m.starNote(thread, b, noteArgs, noteKwargs)
+}
+
+// starCodeBlock is a Starlark function to render source code with chroma syntax
+// highlighting to ANSI terminal output. It is non-interactive (no TTY).
+// def code_block(text, lang="", style="monokai") -> str
+//
+// lang is a chroma lexer name (e.g. "go", "python"); an empty lang lets chroma
+// auto-detect from the source. style is a chroma style name (e.g. "monokai",
+// "dracula", "github-dark"); an unknown lang or style degrades gracefully
+// rather than erroring.
+func (m *Module) starCodeBlock(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		text  = types.StringOrBytes("")                   // source code to highlight
+		lang  = types.NewNullableStringOrBytes("")        // lexer name ("" = autodetect)
+		style = types.NewNullableStringOrBytes("monokai") // chroma style name
+	)
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
+		"text", &text,
+		"lang?", lang,
+		"style?", style,
+	); err != nil {
+		return none, err
+	}
+	if text.IsEmpty() {
+		return none, fmt.Errorf("text is required and cannot be empty")
+	}
+
+	var buf strings.Builder
+	if err := quick.Highlight(&buf, text.GoString(), lang.GoString(), "terminal256", style.GoString()); err != nil {
+		return none, fmt.Errorf("code_block: %w", err)
+	}
+	return starlark.String(buf.String()), nil
 }

@@ -55,6 +55,22 @@ func parseAlign(name string) (lipgloss.Position, error) {
 	}
 }
 
+// parsePosition resolves a cross-axis position name to a lipgloss.Position,
+// accepting both horizontal (left/center/right) and vertical (top/center/bottom)
+// names since compose's alignment axis depends on its direction.
+func parsePosition(name string) (lipgloss.Position, error) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "left", "top", "start":
+		return lipgloss.Top, nil // Top == Left == 0
+	case "center", "centre", "middle":
+		return lipgloss.Center, nil
+	case "right", "bottom", "end":
+		return lipgloss.Bottom, nil // Bottom == Right == 1
+	default:
+		return lipgloss.Left, fmt.Errorf("unsupported align: %s", name)
+	}
+}
+
 // toIntList converts a Starlark int, or a list/tuple of ints, to a []int. It is
 // used for CSS-style padding/margin (1, 2, or 4 values). A None value yields a
 // nil slice (meaning "unset").
@@ -377,6 +393,40 @@ func (m *Module) starTree(thread *starlark.Thread, b *starlark.Builtin, args sta
 	}
 	appendTreeChildren(t, data)
 	return starlark.String(t.String()), nil
+}
+
+// starCompose is a Starlark function to join already-rendered blocks into a
+// layout, horizontally or vertically, with lipgloss.
+// def compose(blocks, dir="v", align="left") -> str
+func (m *Module) starCompose(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		blocks starlark.Value                           // list of pre-rendered string blocks
+		dir    = "v"                                    // "v"/"vertical" or "h"/"horizontal"
+		align  = types.NewNullableStringOrBytes("left") // cross-axis alignment
+	)
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
+		"blocks", &blocks,
+		"dir?", &dir,
+		"align?", align,
+	); err != nil {
+		return none, err
+	}
+	parts, err := starStringSlice(blocks)
+	if err != nil {
+		return none, fmt.Errorf("blocks: %w", err)
+	}
+	pos, err := parsePosition(align.GoString())
+	if err != nil {
+		return none, err
+	}
+	switch strings.ToLower(strings.TrimSpace(dir)) {
+	case "v", "vertical", "":
+		return starlark.String(lipgloss.JoinVertical(pos, parts...)), nil
+	case "h", "horizontal":
+		return starlark.String(lipgloss.JoinHorizontal(pos, parts...)), nil
+	default:
+		return none, fmt.Errorf(`unsupported dir: %s (want "h" or "v")`, dir)
+	}
 }
 
 // isTreeComposite reports whether v should nest as a subtree rather than render

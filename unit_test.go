@@ -702,6 +702,10 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"table bad border", `load("gum","table")` + "\n" + `table(["h"], [["a"]], border="bogus")`, "unsupported border style"},
 		{"filter empty options", `load("gum","filter")` + "\n" + `filter([])`, "options must not be empty"},
 		{"filter non-iterable", `load("gum","filter")` + "\n" + `filter(123)`, "iterable or mapping"},
+		{"compose bad dir", `load("gum","compose")` + "\n" + `compose(["a"], dir="diagonal")`, "unsupported dir"},
+		{"compose non-list blocks", `load("gum","compose")` + "\n" + `compose("nope")`, "blocks:"},
+		{"compose bad align", `load("gum","compose")` + "\n" + `compose(["a"], align="sideways")`, "unsupported align"},
+		{"code_block empty text", `load("gum","code_block")` + "\n" + `code_block("")`, "text is required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -753,6 +757,17 @@ func TestParseAlign(t *testing.T) {
 	}
 	if _, err := parseAlign("sideways"); err == nil {
 		t.Error("parseAlign(sideways) should error")
+	}
+}
+
+func TestParsePosition(t *testing.T) {
+	for _, name := range []string{"left", "top", "start", "center", "centre", "middle", "right", "bottom", "end", "TOP"} {
+		if _, err := parsePosition(name); err != nil {
+			t.Errorf("parsePosition(%q) unexpected error: %v", name, err)
+		}
+	}
+	if _, err := parsePosition("sideways"); err == nil {
+		t.Error("parsePosition(sideways) should error")
 	}
 }
 
@@ -871,6 +886,24 @@ def check():
     for w in ["x", "k v", "t1", "t2"]:
         if w not in r:
             fail("missing %s in: %s" % (w, r))
+check()`,
+		"compose": `load("gum", "compose")
+def check():
+    v = compose(["AAA", "B"], dir = "v")
+    if "AAA" not in v or "B" not in v:
+        fail("missing vertical blocks: " + v)
+    h = compose(["x", "y"], dir = "h", align = "center")
+    if "x" not in h or "y" not in h:
+        fail("missing horizontal blocks: " + h)
+check()`,
+		"code_block": `load("gum", "code_block")
+def check():
+    r = code_block("print(x)", lang = "python")
+    if "print" not in r:
+        fail("missing token: " + r)
+    r2 = code_block("SELECT 1", lang = "sql", style = "dracula")
+    if "SELECT" not in r2:
+        fail("missing sql token: " + r2)
 check()`,
 	}
 	for name, script := range tests {
@@ -1080,7 +1113,7 @@ func TestLoadModuleRegistersBuiltins(t *testing.T) {
 	want := []string{
 		"write", "input", "select", "multi_select", "confirm", "note",
 		"md", "md_note", "spin", "file_pick", "colorize", "set_theme",
-		"style", "table", "tree", "filter",
+		"style", "table", "tree", "compose", "code_block", "filter",
 		"get_width", "set_width", "get_height", "set_height",
 		"get_theme", "get_editor", "set_editor",
 	}

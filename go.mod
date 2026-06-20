@@ -10,6 +10,7 @@ require (
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.4
 	github.com/1set/starlet v0.2.2
+	github.com/alecthomas/chroma/v2 v2.14.0
 	github.com/sahilm/fuzzy v0.1.1
 	github.com/starpkg/base v0.1.1
 	go.starlark.net v0.0.0-20260324133313-ffb3f39dd27a
@@ -18,7 +19,6 @@ require (
 require (
 	github.com/1set/gut v0.0.0-20201117175203-a82363231997 // indirect
 	github.com/1set/starlight v0.2.0 // indirect
-	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect

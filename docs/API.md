@@ -26,10 +26,12 @@ The module is loaded under the name `gum`; load individual builtins with
   - [`md_note`](#md_note)
   - [`spin`](#spin)
   - [`colorize`](#colorize)
+  - [`code_block`](#code_block)
 - [Layout & static rendering](#layout--static-rendering)
   - [`style`](#style)
   - [`table`](#table)
   - [`tree`](#tree)
+  - [`compose`](#compose)
 - [Theming](#theming)
   - [`set_theme`](#set_theme)
 - [Configuration](#configuration)
@@ -39,8 +41,8 @@ The module is loaded under the name `gum`; load individual builtins with
 > `multi_select`, `filter`, `confirm`, `file_pick`, `note`, `spin`) drives the host's
 > controlling terminal. In a headless environment (CI, sandbox, a plain run
 > without a terminal) they fail with `could not open a new TTY`. The
-> non-interactive builtins (`md`, `colorize`, `style`, `table`, `tree`) and all
-> argument validation work anywhere.
+> non-interactive builtins (`md`, `colorize`, `code_block`, `style`, `table`,
+> `tree`, `compose`) and all argument validation work anywhere.
 
 ## Text input
 
@@ -510,6 +512,32 @@ print(colorize(
 ))
 ```
 
+### `code_block`
+
+```text
+code_block(text, lang="", style="monokai")
+```
+
+Renders source code with [chroma] syntax highlighting to ANSI terminal text.
+Non-interactive and works in headless environments.
+
+Parameters:
+
+- `text`: Source code (required, must not be empty).
+- `lang`: chroma lexer name (e.g. `"go"`, `"python"`, `"sql"`); empty
+  auto-detects from the source (default: `""`).
+- `style`: chroma style name (e.g. `"monokai"`, `"dracula"`, `"github-dark"`;
+  default: `"monokai"`).
+
+Returns the highlighted code as a string with ANSI escape codes. An unknown
+`lang` or `style` degrades gracefully rather than erroring.
+
+```python
+load("gum", "code_block")
+
+print(code_block("print('hello')", lang = "python"))
+```
+
 ## Layout & static rendering
 
 These builtins render their input to a string and return it. They are
@@ -612,7 +640,37 @@ load("gum", "tree")
 print(tree({"L1": "starlight", "L2": "starlet", "L4": "starbox"}, root = "Star*"))
 ```
 
+### `compose`
+
+```text
+compose(blocks, dir="v", align="left")
+```
+
+Joins already-rendered blocks (e.g. from `style`) into a layout — stacked
+vertically or placed side by side — via lipgloss.
+
+Parameters:
+
+- `blocks`: List/tuple of pre-rendered string blocks (required).
+- `dir`: `"v"`/`"vertical"` (default) stacks the blocks; `"h"`/`"horizontal"`
+  places them side by side.
+- `align`: Cross-axis alignment — `"left"`/`"center"`/`"right"` when stacking
+  vertically, `"top"`/`"center"`/`"bottom"` when side by side (default:
+  `"left"`).
+
+Returns the composed string. Errors on an unknown `dir` or `align`, or a
+non-list `blocks`.
+
+```python
+load("gum", "style", "compose")
+
+left = style("A", border = "rounded")
+right = style("B", border = "rounded")
+print(compose([left, right], dir = "h", align = "center"))
+```
+
 [lipgloss]: https://github.com/charmbracelet/lipgloss
+[chroma]: https://github.com/alecthomas/chroma
 
 ## Theming
 

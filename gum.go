@@ -126,6 +126,8 @@ func (m *Module) LoadModule() starlet.ModuleLoader {
 		"style":        starlark.NewBuiltin(ModuleName+".style", m.starStyle),
 		"table":        starlark.NewBuiltin(ModuleName+".table", m.starTable),
 		"tree":         starlark.NewBuiltin(ModuleName+".tree", m.starTree),
+		"compose":      starlark.NewBuiltin(ModuleName+".compose", m.starCompose),
+		"code_block":   starlark.NewBuiltin(ModuleName+".code_block", m.starCodeBlock),
 		"filter":       starlark.NewBuiltin(ModuleName+".filter", m.starFilter),
 		// override the default set_theme function
 		"set_theme": starlark.NewBuiltin(ModuleName+".set_theme", m.starSetTheme),
