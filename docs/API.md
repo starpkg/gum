@@ -339,8 +339,8 @@ Parameters:
 - `text`: Markdown text to render (required, must not be empty).
 - `style`: Style to use for rendering (default: `"auto"`). Standard styles from
   the `glamour` package: `"auto"` (detect terminal background), `"ascii"`,
-  `"dark"`, `"dracula"`, `"light"`, `"notty"`, `"pink"`. A path to a custom
-  style JSON file is also accepted.
+  `"dark"`, `"dracula"`, `"light"`, `"notty"`, `"pink"`, `"tokyo-night"`. A path
+  to a custom style JSON file is also accepted.
 - `width`: Width to wrap text at (default: `0` — uses the configured `width`).
 - `emoji`: Enable emoji support (default: `True`).
 - `word_wrap`: Enable word wrapping (default: `True`).

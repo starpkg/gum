@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 
+	huh "charm.land/huh/v2"
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/charmbracelet/huh"
 	"go.starlark.net/starlark"
 )
 

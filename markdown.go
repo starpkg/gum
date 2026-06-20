@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
+	glamour "charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/charmbracelet/glamour"
-	"github.com/muesli/termenv"
 	"go.starlark.net/starlark"
 )
 
@@ -21,6 +21,7 @@ import (
 // - "light": Light theme
 // - "notty": No TTY style
 // - "pink": Pink theme
+// - "tokyo-night": Tokyo Night theme
 // - Custom style file path
 func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
@@ -56,7 +57,11 @@ func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args
 	}
 	normalizedStyle := strings.ToLower(styleStr)
 	if normalizedStyle == "auto" {
-		opts = append(opts, glamour.WithAutoStyle())
+		// glamour v2 removed WithAutoStyle — the renderer is now "pure" and no
+		// longer probes the terminal itself. Resolve light/dark here so "auto"
+		// keeps adapting to the terminal background. HasDarkBackground returns
+		// true (dark) on a non-TTY, matching glamour v2's documented default.
+		opts = append(opts, glamour.WithStandardStyle(mdAutoStyleName(lipgloss.HasDarkBackground(os.Stdin, os.Stdout))))
 	} else if _, err := os.Stat(styleStr); err == nil {
 		// If style is a file path
 		opts = append(opts, glamour.WithStylePath(styleStr))
@@ -73,14 +78,9 @@ func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args
 		opts = append(opts, glamour.WithEmoji())
 	}
 
-	// Determine color profile based on terminal capabilities
-	if termenv.ColorProfile() == termenv.TrueColor {
-		opts = append(opts, glamour.WithColorProfile(termenv.TrueColor))
-	} else if termenv.ColorProfile() == termenv.ANSI256 {
-		opts = append(opts, glamour.WithColorProfile(termenv.ANSI256))
-	} else {
-		opts = append(opts, glamour.WithColorProfile(termenv.ANSI))
-	}
+	// glamour v2 is "pure": it always emits full-color ANSI and no longer
+	// accepts a WithColorProfile downgrade hint (removed upstream). Color
+	// downsampling for limited terminals now happens at print time, not here.
 
 	// Create the renderer
 	r, err := glamour.NewTermRenderer(opts...)
@@ -151,4 +151,16 @@ func (m *Module) starMarkdownNote(thread *starlark.Thread, b *starlark.Builtin, 
 		{starlark.String("timeout"), starlark.Float(timeoutSec.GoFloat())},
 	}
 	return m.starNote(thread, b, noteArgs, noteKwargs)
+}
+
+// mdAutoStyleName maps a terminal background (dark/light) to the glamour
+// builtin style name for the "auto" style. It replaces glamour v2's removed
+// WithAutoStyle: the caller supplies the detected background and this picks the
+// matching standard style ("dark" on a dark or non-TTY terminal, "light"
+// otherwise).
+func mdAutoStyleName(isDark bool) string {
+	if isDark {
+		return "dark"
+	}
+	return "light"
 }

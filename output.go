@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"bitbucket.org/ai69/colorlogo"
+	huh "charm.land/huh/v2"
+	"charm.land/huh/v2/spinner"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/huh/spinner"
-	"github.com/charmbracelet/lipgloss"
 	"go.starlark.net/starlark"
 )
 
@@ -127,11 +126,15 @@ func (m *Module) starSpinner(thread *starlark.Thread, b *starlark.Builtin, args 
 		}
 	)
 
-	// run spinner and action
-	ts := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#00020A", Dark: "#FFFDF5"})
+	// run spinner and action.
+	//
+	// huh v2 dropped Spinner.TitleStyle; title styling now comes from the
+	// spinner Theme. The default theme (spinner.ThemeDefault, used by New())
+	// already renders the title with foreground #00020A/#FFFDF5 — the exact
+	// colors gum hard-coded — and resolves light/dark from the terminal
+	// background at render time, so the look is preserved.
 	err := spinner.New().
 		Title(title.GoString()).
-		TitleStyle(ts).
 		Type(st).
 		Action(actFunc).
 		Run()

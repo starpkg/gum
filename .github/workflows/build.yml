@@ -16,7 +16,11 @@ jobs:
     # automate this).
     uses: 1set/meta/.github/workflows/go-ci.yml@5d86667e7264f012655dab2644dfa44e09597445
     with:
-      go-floor: "1.21"
+      # gum is the ecosystem's go-1.25 exception: charm.land/huh/v2 and
+      # glamour/v2 declare `go 1.25.8`, so the v2 migration forces the floor to
+      # 1.25 (it coincides with the latest-stable leg — there is no version in
+      # between to test, which is expected for this repo only).
+      go-floor: "1.25"
       doc-coverage: true
       doc-coverage-file: docs/API.md
       doc-coverage-config: true

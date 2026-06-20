@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	tea "charm.land/bubbletea/v2"
+	huh "charm.land/huh/v2"
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 	"github.com/starpkg/base"
 	"go.starlark.net/starlark"
 )
