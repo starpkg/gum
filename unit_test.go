@@ -693,6 +693,13 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"spin bad style", `load("gum","spin")` + "\n" + `spin(style="nope")`, "unsupported spinner style"},
 		{"input bad password type", `load("gum","input")` + "\n" + `input(password=123)`, "password must be a bool or None"},
 		{"set_theme requires arg", `load("gum","set_theme")` + "\n" + `set_theme()`, "set_theme"},
+		{"style bad border", `load("gum","style")` + "\n" + `style("x", border="bogus")`, "unsupported border style"},
+		{"style bad fg", `load("gum","style")` + "\n" + `style("x", fg="notacolor")`, "fg:"},
+		{"style bad align", `load("gum","style")` + "\n" + `style("x", align="sideways")`, "unsupported align"},
+		{"style bad padding", `load("gum","style")` + "\n" + `style("x", padding="lots")`, "padding:"},
+		{"table non-list headers", `load("gum","table")` + "\n" + `table("nope", [])`, "headers:"},
+		{"table bad row", `load("gum","table")` + "\n" + `table(["h"], ["notarow"])`, "row 0"},
+		{"table bad border", `load("gum","table")` + "\n" + `table(["h"], [["a"]], border="bogus")`, "unsupported border style"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -720,6 +727,152 @@ func TestNonTTYSuccessPaths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			requireGumScriptOK(t, tt.script)
 		})
+	}
+}
+
+// --- render helpers + static renderers (style/table/tree) -------------------
+
+func TestParseBorder(t *testing.T) {
+	for _, name := range []string{"normal", "square", "rounded", "round", "thick", "bold", "double", "block", "hidden", "none", "ROUNDED", "  rounded  "} {
+		if _, err := parseBorder(name); err != nil {
+			t.Errorf("parseBorder(%q) unexpected error: %v", name, err)
+		}
+	}
+	if _, err := parseBorder("bogus"); err == nil {
+		t.Error("parseBorder(bogus) should error")
+	}
+}
+
+func TestParseAlign(t *testing.T) {
+	for _, name := range []string{"left", "start", "center", "centre", "middle", "right", "end", "LEFT"} {
+		if _, err := parseAlign(name); err != nil {
+			t.Errorf("parseAlign(%q) unexpected error: %v", name, err)
+		}
+	}
+	if _, err := parseAlign("sideways"); err == nil {
+		t.Error("parseAlign(sideways) should error")
+	}
+}
+
+func TestToIntList(t *testing.T) {
+	if got, err := toIntList(nil); err != nil || got != nil {
+		t.Errorf("nil -> %v, %v", got, err)
+	}
+	if got, err := toIntList(starlark.None); err != nil || got != nil {
+		t.Errorf("None -> %v, %v", got, err)
+	}
+	if got, err := toIntList(starlark.MakeInt(3)); err != nil || len(got) != 1 || got[0] != 3 {
+		t.Errorf("int -> %v, %v", got, err)
+	}
+	if got, err := toIntList(starlark.NewList([]starlark.Value{starlark.MakeInt(1), starlark.MakeInt(2)})); err != nil || len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Errorf("list -> %v, %v", got, err)
+	}
+	if got, err := toIntList(starlark.Tuple{starlark.MakeInt(4), starlark.MakeInt(5)}); err != nil || len(got) != 2 {
+		t.Errorf("tuple -> %v, %v", got, err)
+	}
+	if _, err := toIntList(starlark.NewList([]starlark.Value{starlark.String("x")})); err == nil {
+		t.Error("non-int element should error")
+	}
+	if _, err := toIntList(starlark.String("x")); err == nil {
+		t.Error("string should error")
+	}
+}
+
+func TestStarStringSlice(t *testing.T) {
+	got, err := starStringSlice(starlark.NewList([]starlark.Value{starlark.String("a"), starlark.MakeInt(2)}))
+	if err != nil || len(got) != 2 || got[0] != "a" || got[1] != "2" {
+		t.Errorf("list -> %v, %v", got, err)
+	}
+	if got, err := starStringSlice(starlark.Tuple{starlark.String("x")}); err != nil || len(got) != 1 {
+		t.Errorf("tuple -> %v, %v", got, err)
+	}
+	if _, err := starStringSlice(starlark.String("abc")); err == nil {
+		t.Error("bare string should error (not split into chars)")
+	}
+	if _, err := starStringSlice(starlark.MakeInt(1)); err == nil {
+		t.Error("int should error")
+	}
+}
+
+func TestIterValues(t *testing.T) {
+	if got, err := iterValues(starlark.Tuple{starlark.String("a"), starlark.MakeInt(1)}); err != nil || len(got) != 2 {
+		t.Errorf("tuple -> %v, %v", got, err)
+	}
+	set := starlark.NewSet(2)
+	_ = set.Insert(starlark.String("a"))
+	_ = set.Insert(starlark.String("b"))
+	if got, err := iterValues(set); err != nil || len(got) != 2 {
+		t.Errorf("set -> %v, %v", got, err)
+	}
+	if _, err := iterValues(starlark.String("abc")); err == nil {
+		t.Error("bare string should error")
+	}
+	if _, err := iterValues(starlark.MakeInt(1)); err == nil {
+		t.Error("int should error")
+	}
+	// starStringSlice over a set exercises its generic Iterable branch.
+	if ss, err := starStringSlice(set); err != nil || len(ss) != 2 {
+		t.Errorf("starStringSlice(set) -> %v, %v", ss, err)
+	}
+}
+
+// TestStaticRenderers exercises style/table/tree end to end through Starlark,
+// asserting the rendered string carries the input text and the expected
+// structural runes (box borders, tree connectors). They run headlessly — the
+// renderers only return a string, no TTY. Assertions live inside a function
+// because this Starlark dialect forbids top-level if/for.
+func TestStaticRenderers(t *testing.T) {
+	tests := map[string]string{
+		"style": `load("gum", "style")
+def check():
+    r = style("PASS", bold = True, border = "rounded", padding = (0, 2), fg = "purple")
+    if "PASS" not in r:
+        fail("missing text: " + r)
+    if "╭" not in r:
+        fail("missing rounded border: " + r)
+check()`,
+		"table": `load("gum", "table")
+def check():
+    r = table(["module", "layer"], [["starbox", "L4"], ["starcli", "L5"]])
+    for w in ["module", "layer", "starbox", "L5"]:
+        if w not in r:
+            fail("missing cell %s in: %s" % (w, r))
+    if "│" not in r:
+        fail("missing border: " + r)
+check()`,
+		"tree": `load("gum", "tree")
+def check():
+    r = tree({"Star*": {"L1": "starlight", "L2": "starlet"}})
+    if "Star*" not in r:
+        fail("missing root: " + r)
+    if "L1 starlight" not in r:
+        fail("missing nested leaf: " + r)
+    if "──" not in r:
+        fail("missing connector: " + r)
+    r2 = tree(["a", "b", "c"], root = "items")
+    if "items" not in r2 or "a" not in r2 or "c" not in r2:
+        fail("missing list nodes: " + r2)
+check()`,
+		"style-attrs": `load("gum", "style")
+def check():
+    # underline makes lipgloss wrap each rune in its own escape span, so the
+    # text is not a contiguous substring; assert a single char + the border.
+    r = style("hi", fg = "#7D56F4", bg = "white", italic = True, underline = True, faint = True, border = "double", border_fg = "red", margin = 1, width = 30, align = "center")
+    if "h" not in r:
+        fail("missing text char: " + r)
+    if "╔" not in r:
+        fail("missing double border: " + r)
+check()`,
+		"tree-nested-list": `load("gum", "tree")
+def check():
+    r = tree({"top": ["x", {"k": "v"}, ("t1", "t2")]})
+    for w in ["x", "k v", "t1", "t2"]:
+        if w not in r:
+            fail("missing %s in: %s" % (w, r))
+check()`,
+	}
+	for name, script := range tests {
+		t.Run(name, func(t *testing.T) { requireGumScriptOK(t, script) })
 	}
 }
 
@@ -812,6 +965,7 @@ func TestLoadModuleRegistersBuiltins(t *testing.T) {
 	want := []string{
 		"write", "input", "select", "multi_select", "confirm", "note",
 		"md", "md_note", "spin", "file_pick", "colorize", "set_theme",
+		"style", "table", "tree",
 		"get_width", "set_width", "get_height", "set_height",
 		"get_theme", "get_editor", "set_editor",
 	}

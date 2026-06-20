@@ -1,0 +1,398 @@
+package gum
+
+import (
+	"fmt"
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
+	"charm.land/lipgloss/v2/tree"
+	"github.com/1set/starlet/dataconv"
+	"github.com/1set/starlet/dataconv/types"
+	"go.starlark.net/starlark"
+)
+
+// render.go holds the non-interactive lipgloss v2 static renderers: style
+// (styled text / boxes), table (bordered tables), and tree (nested trees).
+// Unlike the huh-driven builtins these never open a TTY — they take data and
+// return a rendered string, so they work in headless environments.
+
+// borderMap maps a border name to its lipgloss border. Names are matched
+// case-insensitively; "none"/"hidden" yield an invisible (space) border.
+var borderMap = map[string]func() lipgloss.Border{
+	"normal":  lipgloss.NormalBorder,
+	"square":  lipgloss.NormalBorder,
+	"rounded": lipgloss.RoundedBorder,
+	"round":   lipgloss.RoundedBorder,
+	"thick":   lipgloss.ThickBorder,
+	"bold":    lipgloss.ThickBorder,
+	"double":  lipgloss.DoubleBorder,
+	"block":   lipgloss.BlockBorder,
+	"hidden":  lipgloss.HiddenBorder,
+	"none":    lipgloss.HiddenBorder,
+}
+
+// parseBorder resolves a border name to a lipgloss.Border.
+func parseBorder(name string) (lipgloss.Border, error) {
+	if f, ok := borderMap[strings.ToLower(strings.TrimSpace(name))]; ok {
+		return f(), nil
+	}
+	return lipgloss.Border{}, fmt.Errorf("unsupported border style: %s", name)
+}
+
+// parseAlign resolves a horizontal alignment name to a lipgloss.Position.
+func parseAlign(name string) (lipgloss.Position, error) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "left", "start":
+		return lipgloss.Left, nil
+	case "center", "centre", "middle":
+		return lipgloss.Center, nil
+	case "right", "end":
+		return lipgloss.Right, nil
+	default:
+		return lipgloss.Left, fmt.Errorf("unsupported align: %s", name)
+	}
+}
+
+// toIntList converts a Starlark int, or a list/tuple of ints, to a []int. It is
+// used for CSS-style padding/margin (1, 2, or 4 values). A None value yields a
+// nil slice (meaning "unset").
+func toIntList(v starlark.Value) ([]int, error) {
+	if v == nil || v == starlark.None {
+		return nil, nil
+	}
+	appendInt := func(out []int, e starlark.Value) ([]int, error) {
+		n, ok := e.(starlark.Int)
+		if !ok {
+			return nil, fmt.Errorf("expected int, got %s", e.Type())
+		}
+		i, _ := n.Int64()
+		return append(out, int(i)), nil
+	}
+	switch t := v.(type) {
+	case starlark.Int:
+		i, _ := t.Int64()
+		return []int{int(i)}, nil
+	case *starlark.List:
+		out := make([]int, 0, t.Len())
+		var err error
+		for i := 0; i < t.Len(); i++ {
+			if out, err = appendInt(out, t.Index(i)); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
+	case starlark.Tuple:
+		out := make([]int, 0, len(t))
+		var err error
+		for _, e := range t {
+			if out, err = appendInt(out, e); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected int or list/tuple of ints, got %s", v.Type())
+	}
+}
+
+// starStringSlice converts a Starlark list/tuple/iterable to a []string,
+// stringifying each element. A bare string is rejected (it is not a row).
+func starStringSlice(v starlark.Value) ([]string, error) {
+	switch t := v.(type) {
+	case *starlark.List:
+		out := make([]string, t.Len())
+		for i := 0; i < t.Len(); i++ {
+			out[i] = dataconv.StarString(t.Index(i))
+		}
+		return out, nil
+	case starlark.Tuple:
+		out := make([]string, len(t))
+		for i, e := range t {
+			out[i] = dataconv.StarString(e)
+		}
+		return out, nil
+	case starlark.String:
+		return nil, fmt.Errorf("expected a list/tuple of values, got string")
+	case starlark.Iterable:
+		var out []string
+		it := t.Iterate()
+		defer it.Done()
+		var e starlark.Value
+		for it.Next(&e) {
+			out = append(out, dataconv.StarString(e))
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected a list/tuple of values, got %s", v.Type())
+	}
+}
+
+// starStringMatrix converts a Starlark list/tuple/iterable of rows (each itself
+// a list/tuple/iterable) to a [][]string.
+func starStringMatrix(v starlark.Value) ([][]string, error) {
+	rowsAsValues, err := iterValues(v)
+	if err != nil {
+		return nil, err
+	}
+	out := make([][]string, 0, len(rowsAsValues))
+	for i, rowVal := range rowsAsValues {
+		row, err := starStringSlice(rowVal)
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", i, err)
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// iterValues returns the elements of a Starlark list/tuple/iterable as a slice,
+// rejecting a bare string (which would otherwise iterate by character).
+func iterValues(v starlark.Value) ([]starlark.Value, error) {
+	switch t := v.(type) {
+	case *starlark.List:
+		out := make([]starlark.Value, t.Len())
+		for i := 0; i < t.Len(); i++ {
+			out[i] = t.Index(i)
+		}
+		return out, nil
+	case starlark.Tuple:
+		return []starlark.Value(t), nil
+	case starlark.String:
+		return nil, fmt.Errorf("expected a list/tuple, got string")
+	case starlark.Iterable:
+		var out []starlark.Value
+		it := t.Iterate()
+		defer it.Done()
+		var e starlark.Value
+		for it.Next(&e) {
+			out = append(out, e)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected a list/tuple, got %s", v.Type())
+	}
+}
+
+// starStyle is a Starlark function to render styled text with lipgloss (the
+// non-interactive equivalent of `gum style`).
+// def style(text, fg="", bg="", bold=False, italic=False, underline=False, faint=False, border="", border_fg="", padding=None, margin=None, width=0, align="") -> str
+func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		text      = types.StringOrBytes("")            // text to style
+		fg        = types.NewNullableStringOrBytes("") // foreground color
+		bg        = types.NewNullableStringOrBytes("") // background color
+		bold      = false                              // bold text
+		italic    = false                              // italic text
+		underline = false                              // underlined text
+		faint     = false                              // faint text
+		border    = types.NewNullableStringOrBytes("") // border style name
+		borderFg  = types.NewNullableStringOrBytes("") // border foreground color
+		padding   starlark.Value                       // int or (top,right,bottom,left) ints
+		margin    starlark.Value                       // int or (top,right,bottom,left) ints
+		width     = 0                                  // fixed width (0 = natural)
+		align     = types.NewNullableStringOrBytes("") // horizontal alignment
+	)
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
+		"text", &text,
+		"fg?", fg,
+		"bg?", bg,
+		"bold?", &bold,
+		"italic?", &italic,
+		"underline?", &underline,
+		"faint?", &faint,
+		"border?", border,
+		"border_fg?", borderFg,
+		"padding?", &padding,
+		"margin?", &margin,
+		"width?", &width,
+		"align?", align,
+	); err != nil {
+		return none, err
+	}
+
+	st := lipgloss.NewStyle()
+	if !fg.IsNullOrEmpty() {
+		c, err := ParseColor(fg.GoString())
+		if err != nil {
+			return none, fmt.Errorf("fg: %w", err)
+		}
+		st = st.Foreground(c)
+	}
+	if !bg.IsNullOrEmpty() {
+		c, err := ParseColor(bg.GoString())
+		if err != nil {
+			return none, fmt.Errorf("bg: %w", err)
+		}
+		st = st.Background(c)
+	}
+	if bold {
+		st = st.Bold(true)
+	}
+	if italic {
+		st = st.Italic(true)
+	}
+	if underline {
+		st = st.Underline(true)
+	}
+	if faint {
+		st = st.Faint(true)
+	}
+	if !border.IsNullOrEmpty() {
+		bd, err := parseBorder(border.GoString())
+		if err != nil {
+			return none, err
+		}
+		st = st.Border(bd)
+	}
+	if !borderFg.IsNullOrEmpty() {
+		c, err := ParseColor(borderFg.GoString())
+		if err != nil {
+			return none, fmt.Errorf("border_fg: %w", err)
+		}
+		st = st.BorderForeground(c)
+	}
+	if p, err := toIntList(padding); err != nil {
+		return none, fmt.Errorf("padding: %w", err)
+	} else if len(p) > 0 {
+		st = st.Padding(p...)
+	}
+	if mg, err := toIntList(margin); err != nil {
+		return none, fmt.Errorf("margin: %w", err)
+	} else if len(mg) > 0 {
+		st = st.Margin(mg...)
+	}
+	if width > 0 {
+		st = st.Width(width)
+	}
+	if !align.IsNullOrEmpty() {
+		p, err := parseAlign(align.GoString())
+		if err != nil {
+			return none, err
+		}
+		st = st.Align(p)
+	}
+	return starlark.String(st.Render(text.GoString())), nil
+}
+
+// starTable is a Starlark function to render a bordered table with lipgloss.
+// def table(headers, rows, border="rounded", border_fg="") -> str
+func (m *Module) starTable(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		headersVal starlark.Value                              // list of header strings
+		rowsVal    starlark.Value                              // list of rows (each a list of cell strings)
+		border     = types.NewNullableStringOrBytes("rounded") // border style name
+		borderFg   = types.NewNullableStringOrBytes("")        // border foreground color
+	)
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
+		"headers", &headersVal,
+		"rows", &rowsVal,
+		"border?", border,
+		"border_fg?", borderFg,
+	); err != nil {
+		return none, err
+	}
+
+	headers, err := starStringSlice(headersVal)
+	if err != nil {
+		return none, fmt.Errorf("headers: %w", err)
+	}
+	rows, err := starStringMatrix(rowsVal)
+	if err != nil {
+		return none, fmt.Errorf("rows: %w", err)
+	}
+
+	t := table.New().Headers(headers...).Rows(rows...)
+	if !border.IsNullOrEmpty() {
+		bd, err := parseBorder(border.GoString())
+		if err != nil {
+			return none, err
+		}
+		t = t.Border(bd)
+	}
+	if !borderFg.IsNullOrEmpty() {
+		c, err := ParseColor(borderFg.GoString())
+		if err != nil {
+			return none, fmt.Errorf("border_fg: %w", err)
+		}
+		t = t.BorderStyle(lipgloss.NewStyle().Foreground(c))
+	}
+	return starlark.String(t.String()), nil
+}
+
+// starTree is a Starlark function to render a nested tree with lipgloss.
+// def tree(data, root="") -> str
+//
+// data is a dict, list, or scalar. A dict renders each key as a branch — a
+// scalar value joins onto the key ("key value"), a dict/list value nests under
+// it. A list renders each element as a node. root, if set, labels the top.
+func (m *Module) starTree(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		data starlark.Value                       // the tree data
+		root = types.NewNullableStringOrBytes("") // optional label for the root node
+	)
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
+		"data", &data,
+		"root?", root,
+	); err != nil {
+		return none, err
+	}
+
+	t := tree.New()
+	if !root.IsNullOrEmpty() {
+		t = t.Root(root.GoString())
+	}
+	appendTreeChildren(t, data)
+	return starlark.String(t.String()), nil
+}
+
+// isTreeComposite reports whether v should nest as a subtree rather than render
+// as a leaf.
+func isTreeComposite(v starlark.Value) bool {
+	switch v.(type) {
+	case *starlark.Dict, *starlark.List, starlark.Tuple:
+		return true
+	}
+	return false
+}
+
+// appendTreeChildren adds v's contents to parent as tree children: dict entries
+// nest by key, list/tuple elements append in order, and scalars become leaves.
+func appendTreeChildren(parent *tree.Tree, v starlark.Value) {
+	switch t := v.(type) {
+	case *starlark.Dict:
+		for _, k := range t.Keys() {
+			val, _, _ := t.Get(k)
+			ks := dataconv.StarString(k)
+			if isTreeComposite(val) {
+				sub := tree.Root(ks)
+				appendTreeChildren(sub, val)
+				parent.Child(sub)
+			} else {
+				parent.Child(ks + " " + dataconv.StarString(val))
+			}
+		}
+	case *starlark.List:
+		for i := 0; i < t.Len(); i++ {
+			appendTreeChild(parent, t.Index(i))
+		}
+	case starlark.Tuple:
+		for _, e := range t {
+			appendTreeChild(parent, e)
+		}
+	default:
+		parent.Child(dataconv.StarString(v))
+	}
+}
+
+// appendTreeChild adds a single list element: a composite nests as an unlabeled
+// subtree, a scalar becomes a leaf.
+func appendTreeChild(parent *tree.Tree, e starlark.Value) {
+	if isTreeComposite(e) {
+		sub := tree.New()
+		appendTreeChildren(sub, e)
+		parent.Child(sub)
+	} else {
+		parent.Child(dataconv.StarString(e))
+	}
+}
