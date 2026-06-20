@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	glamour "charm.land/glamour/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/1set/starlet/dataconv/types"
 	"go.starlark.net/starlark"
 )
@@ -14,7 +13,7 @@ import (
 // starMarkdown is a Starlark function to render markdown text to ANSI terminal output.
 // def md(text: str, style: str = "auto", width: int = 0, emoji: bool = True, word_wrap: bool = True) -> str
 // Available styles from glamour package:
-// - "auto": Automatically detect terminal background
+// - "auto": Default dark theme (glamour v2 no longer probes the terminal)
 // - "ascii": Plain ASCII style
 // - "dark": Dark theme
 // - "dracula": Dracula theme
@@ -57,11 +56,12 @@ func (m *Module) starMarkdown(thread *starlark.Thread, b *starlark.Builtin, args
 	}
 	normalizedStyle := strings.ToLower(styleStr)
 	if normalizedStyle == "auto" {
-		// glamour v2 removed WithAutoStyle — the renderer is now "pure" and no
-		// longer probes the terminal itself. Resolve light/dark here so "auto"
-		// keeps adapting to the terminal background. HasDarkBackground returns
-		// true (dark) on a non-TTY, matching glamour v2's documented default.
-		opts = append(opts, glamour.WithStandardStyle(mdAutoStyleName(lipgloss.HasDarkBackground(os.Stdin, os.Stdout))))
+		// glamour v2 removed WithAutoStyle and no longer probes the terminal
+		// (the renderer is now "pure"). Map "auto" to glamour v2's documented
+		// default, "dark"; a light terminal can pass style="light" explicitly.
+		// Probing the background here would block md() on a non-TTY — it hung
+		// the Windows CI leg for 10 minutes — and md() only returns a string.
+		opts = append(opts, glamour.WithStandardStyle("dark"))
 	} else if _, err := os.Stat(styleStr); err == nil {
 		// If style is a file path
 		opts = append(opts, glamour.WithStylePath(styleStr))
@@ -151,16 +151,4 @@ func (m *Module) starMarkdownNote(thread *starlark.Thread, b *starlark.Builtin, 
 		{starlark.String("timeout"), starlark.Float(timeoutSec.GoFloat())},
 	}
 	return m.starNote(thread, b, noteArgs, noteKwargs)
-}
-
-// mdAutoStyleName maps a terminal background (dark/light) to the glamour
-// builtin style name for the "auto" style. It replaces glamour v2's removed
-// WithAutoStyle: the caller supplies the detected background and this picks the
-// matching standard style ("dark" on a dark or non-TTY terminal, "light"
-// otherwise).
-func mdAutoStyleName(isDark bool) string {
-	if isDark {
-		return "dark"
-	}
-	return "light"
 }

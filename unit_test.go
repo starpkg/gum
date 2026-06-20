@@ -16,7 +16,6 @@ package gum
 //   - convertOptionList: list/dict/iterable -> huh options (select.go)
 //   - convertValidator: sandboxed validator semantics (gum.go)
 //   - normalizePattern / normalizeRenderType: colorize key building (output.go)
-//   - mdAutoStyleName: "auto" -> dark/light glamour style mapping (markdown.go)
 //   - ignorableError: clean cancellation — abort/timeout -> None (gum.go)
 //   - parseColorQuery malformed components: bad input errors, never wrong (color.go)
 //   - non-TTY builtin error branches: bad args/empty inputs -> clean errors
@@ -560,21 +559,6 @@ func TestNormalizeRenderType(t *testing.T) {
 		if got := normalizeRenderType(in); got != want {
 			t.Errorf("normalizeRenderType(%q) = %q, want %q", in, got, want)
 		}
-	}
-}
-
-// --- mdAutoStyleName --------------------------------------------------------
-
-// TestMdAutoStyleName covers the pure dark/light decision behind md()'s "auto"
-// style (glamour v2 dropped WithAutoStyle). The terminal-background probe
-// (lipgloss.HasDarkBackground) is the impure part, exercised by the md "auto"
-// success path; this pins the mapping itself, both arms.
-func TestMdAutoStyleName(t *testing.T) {
-	if got := mdAutoStyleName(true); got != "dark" {
-		t.Errorf("mdAutoStyleName(true) = %q, want dark", got)
-	}
-	if got := mdAutoStyleName(false); got != "light" {
-		t.Errorf("mdAutoStyleName(false) = %q, want light", got)
 	}
 }
 
