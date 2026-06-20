@@ -16,6 +16,7 @@ The module is loaded under the name `gum`; load individual builtins with
 - [Selection](#selection)
   - [`select`](#select)
   - [`multi_select`](#multi_select)
+  - [`filter`](#filter)
   - [`confirm`](#confirm)
 - [File picker](#file-picker)
   - [`file_pick`](#file_pick)
@@ -35,7 +36,7 @@ The module is loaded under the name `gum`; load individual builtins with
   - Accessors: `get_width` / `set_width`, `get_height` / `set_height`, `get_theme` / `set_theme`, `get_editor` / `set_editor`
 
 > **TTY note.** Every interactive builtin (`input`, `write`, `select`,
-> `multi_select`, `confirm`, `file_pick`, `note`, `spin`) drives the host's
+> `multi_select`, `filter`, `confirm`, `file_pick`, `note`, `spin`) drives the host's
 > controlling terminal. In a headless environment (CI, sandbox, a plain run
 > without a terminal) they fail with `could not open a new TTY`. The
 > non-interactive builtins (`md`, `colorize`, `style`, `table`, `tree`) and all
@@ -223,6 +224,34 @@ if color and fruits:
         next = "Continue",
     )
 ```
+
+### `filter`
+
+```text
+filter(options, value="", placeholder="Filter...", title="", fuzzy=True,
+       limit=1, height=10)
+```
+
+Interactively filters a list as you type, ranking matches by **fuzzy** match —
+distinct from `select`, whose `show_filter` is a fixed case-insensitive
+substring match. `options` is a list, dict, or iterable (a dict displays its
+keys and returns the matching value, like `select`).
+
+Parameters:
+
+- `options`: List/dict/iterable of options (required, non-empty).
+- `value`: Initial filter query (default: `""`).
+- `placeholder`: Placeholder for the query input (default: `"Filter..."`).
+- `title`: Title shown above the input (default: `""`).
+- `fuzzy`: Fuzzy match when `True`; case-insensitive substring when `False`
+  (default: `True`).
+- `limit`: `1` (default) is single-select and returns the chosen string; any
+  other value is multi-select (`0` = unlimited) where <kbd>Tab</kbd> marks
+  items and it returns a list of strings.
+- `height`: Maximum visible rows (default: `10`).
+
+Returns the selected string (single) or list of strings (multi), or `None` if
+cancelled (<kbd>Ctrl-C</kbd> / <kbd>Esc</kbd>). **Requires a TTY.**
 
 ### `confirm`
 
