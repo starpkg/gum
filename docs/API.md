@@ -25,6 +25,10 @@ The module is loaded under the name `gum`; load individual builtins with
   - [`md_note`](#md_note)
   - [`spin`](#spin)
   - [`colorize`](#colorize)
+- [Layout & static rendering](#layout--static-rendering)
+  - [`style`](#style)
+  - [`table`](#table)
+  - [`tree`](#tree)
 - [Theming](#theming)
   - [`set_theme`](#set_theme)
 - [Configuration](#configuration)
@@ -34,8 +38,8 @@ The module is loaded under the name `gum`; load individual builtins with
 > `multi_select`, `confirm`, `file_pick`, `note`, `spin`) drives the host's
 > controlling terminal. In a headless environment (CI, sandbox, a plain run
 > without a terminal) they fail with `could not open a new TTY`. The
-> non-interactive builtins (`md`, `colorize`) and all argument validation work
-> anywhere.
+> non-interactive builtins (`md`, `colorize`, `style`, `table`, `tree`) and all
+> argument validation work anywhere.
 
 ## Text input
 
@@ -476,6 +480,110 @@ print(colorize(
     render = "Column",
 ))
 ```
+
+## Layout & static rendering
+
+These builtins render their input to a string and return it. They are
+**non-interactive** — no TTY — so they work in headless environments (CI,
+sandboxes, pipelines). Colors are taken from `gum`'s own color vocabulary
+(preset names, `rgb(...)`, `hsb(...)`, `#RRGGBB`/`#RGB`), the same as
+`colorize`. To display the result, `print` it.
+
+### `style`
+
+```text
+style(text, fg="", bg="", bold=False, italic=False, underline=False,
+      faint=False, border="", border_fg="", padding=None, margin=None,
+      width=0, align="")
+```
+
+Renders `text` with [lipgloss] styling — colors, text attributes, a border, and
+box spacing — the non-interactive counterpart of `gum style`.
+
+Parameters:
+
+- `text`: Text to style (required).
+- `fg` / `bg`: Foreground / background color (default: `""` — unset).
+- `bold` / `italic` / `underline` / `faint`: Text attributes (default: `False`).
+- `border`: Border style — one of `"normal"` (a.k.a. `"square"`), `"rounded"`,
+  `"thick"` (a.k.a. `"bold"`), `"double"`, `"block"`, `"hidden"`/`"none"`
+  (default: `""` — no border).
+- `border_fg`: Border foreground color (default: `""`).
+- `padding` / `margin`: Inside / outside spacing, as an int (all sides) or a
+  list/tuple of ints in CSS order (1, 2, or 4 values; default: `None`).
+- `width`: Fixed render width (default: `0` — natural width).
+- `align`: Horizontal alignment of wrapped/padded text — `"left"`, `"center"`,
+  or `"right"` (default: `""` — left).
+
+Returns the rendered string. Errors on an unknown color, border, or alignment
+name, or a non-int padding/margin.
+
+```python
+load("gum", "style")
+
+print(style("PASS ✓ all green", fg = "#7D56F4", bold = True,
+            border = "rounded", padding = (1, 2)))
+```
+
+### `table`
+
+```text
+table(headers, rows, border="rounded", border_fg="")
+```
+
+Renders a bordered table. `headers` is a list of column titles; `rows` is a
+list of rows, each a list of cell values (values are stringified).
+
+Parameters:
+
+- `headers`: List of header strings (required).
+- `rows`: List of rows, each a list of cell values (required).
+- `border`: Border style (see `style`; default: `"rounded"`).
+- `border_fg`: Border foreground color (default: `""`).
+
+Returns the rendered table string. Errors on a non-list `headers`/`rows`, a row
+that is not a list, or an unknown border/color.
+
+```python
+load("gum", "table")
+
+print(table(
+    headers = ["module", "layer", "version"],
+    rows = [
+        ["starbox", "L4", "v0.2.0"],
+        ["starcli", "L5", "-"],
+    ],
+    border = "rounded",
+))
+```
+
+### `tree`
+
+```text
+tree(data, root="")
+```
+
+Renders a nested tree. `data` is a dict, list, or scalar:
+
+- a **dict** renders each key as a branch — a scalar value joins onto the key
+  (`"key value"`), a dict/list value nests beneath it;
+- a **list/tuple** renders each element as a node (scalars are leaves, nested
+  collections become subtrees);
+- a **scalar** is a single leaf.
+
+`root`, if given, labels the top of the tree (otherwise the top-level entries
+are listed directly).
+
+Returns the rendered tree string.
+
+```python
+load("gum", "tree")
+
+# A labelled root with leaf children:
+print(tree({"L1": "starlight", "L2": "starlet", "L4": "starbox"}, root = "Star*"))
+```
+
+[lipgloss]: https://github.com/charmbracelet/lipgloss
 
 ## Theming
 

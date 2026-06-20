@@ -7,6 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.2
 	charm.land/glamour/v2 v2.0.1
 	charm.land/huh/v2 v2.0.3
+	charm.land/lipgloss/v2 v2.0.4
 	github.com/1set/starlet v0.2.2
 	github.com/starpkg/base v0.1.1
 	go.starlark.net v0.0.0-20260324133313-ffb3f39dd27a
@@ -14,7 +15,6 @@ require (
 
 require (
 	charm.land/bubbles/v2 v2.0.0 // indirect
-	charm.land/lipgloss/v2 v2.0.4 // indirect
 	github.com/1set/gut v0.0.0-20201117175203-a82363231997 // indirect
 	github.com/1set/starlight v0.2.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
