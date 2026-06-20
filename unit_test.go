@@ -14,6 +14,7 @@ package gum
 //   - convertDuration: float/int -> time.Duration, including extreme values (gum.go)
 //   - applyTheme / getWidth / getHeight: config defaulting (gum.go)
 //   - convertOptionList: list/dict/iterable -> huh options (select.go)
+//   - normalizeExt / normalizeExtList: file_pick allow_ext canonicalization (select.go)
 //   - convertValidator: sandboxed validator semantics (gum.go)
 //   - normalizePattern / normalizeRenderType: colorize key building (output.go)
 //   - ignorableError: clean cancellation — abort/timeout -> None (gum.go)
@@ -434,6 +435,45 @@ func TestConvertOptionList(t *testing.T) {
 			t.Fatalf("expected iterable/mapping error for None, got %v", err)
 		}
 	})
+}
+
+// --- normalizeExt / normalizeExtList ----------------------------------------
+
+// TestNormalizeExt covers the file_pick allow_ext canonicalization: "py",
+// ".py", and "*.py" all collapse to ".py" (the suffix the picker matches),
+// surrounding whitespace is trimmed, case is preserved (suffix match is
+// case-sensitive), and extension-less entries become "".
+func TestNormalizeExt(t *testing.T) {
+	cases := map[string]string{
+		"py":       ".py",
+		".py":      ".py",
+		"*.py":     ".py",
+		" .md ":    ".md",
+		"*.tar.gz": ".tar.gz",
+		"PY":       ".PY",
+		"":         "",
+		"*":        "",
+		".":        "",
+	}
+	for in, want := range cases {
+		if got := normalizeExt(in); got != want {
+			t.Errorf("normalizeExt(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestNormalizeExtList normalizes each entry and drops the extension-less ones.
+func TestNormalizeExtList(t *testing.T) {
+	got := normalizeExtList([]string{"py", " .md ", "*.go", "", "*", "."})
+	want := []string{".py", ".md", ".go"}
+	if len(got) != len(want) {
+		t.Fatalf("normalizeExtList = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("normalizeExtList = %v, want %v", got, want)
+		}
+	}
 }
 
 // --- convertValidator (sandboxed re-entrancy) -------------------------------

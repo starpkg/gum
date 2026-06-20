@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	huh "charm.land/huh/v2"
 	"github.com/1set/starlet/dataconv"
@@ -257,14 +258,44 @@ func convertOptionList(r starlark.Value) ([]huh.Option[string], error) {
 	return opts, nil
 }
 
+// normalizeExt canonicalizes one user-supplied file extension to the ".ext"
+// form the file picker matches against (it matches by suffix). It accepts
+// "py", ".py", or "*.py" (with surrounding whitespace) and returns ".py". An
+// entry that carries no extension ("", "*", ".") returns "".
+func normalizeExt(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "*")
+	if s == "" || s == "." {
+		return ""
+	}
+	if !strings.HasPrefix(s, ".") {
+		s = "." + s
+	}
+	return s
+}
+
+// normalizeExtList normalizes each entry via normalizeExt and drops the ones
+// that carry no extension, so allow_ext=["py", " .md ", "*.go", ""] becomes
+// [".py", ".md", ".go"].
+func normalizeExtList(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if n := normalizeExt(s); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // starFilePicker is a Starlark function to create a TUI file picker for selecting a file or directory.
-// def file_pick(path: str = ".", title: str = "", description: str = "", validate: Callable = None, allow_ext: Union[str, List[str]] = [], allow_dir: bool = False, allow_file: bool = True, show_hidden: bool = False, show_perm: bool = True, show_size: bool = False, height: int = 10, show_help: bool = True, timeout: float = 0) -> str
+// def file_pick(path: str = ".", title: str = "", description: str = "", validate: Callable = None, cursor: str = ">", allow_ext: Union[str, List[str]] = [], allow_dir: bool = False, allow_file: bool = True, show_hidden: bool = False, show_perm: bool = True, show_size: bool = False, height: int = 10, show_help: bool = True, timeout: float = 0) -> str
 func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		initialPath     = "."                                            // initial path string
 		title           = ""                                             // title text
 		description     = ""                                             // description text
 		validateFunc    types.NullableCallable                           // validation function
+		cursor          = ">"                                            // cursor glyph (">" matches the picker default, so the default is backward compatible)
 		allowExtensions = types.NewOneOrManyNoDefault[starlark.String]() // allowed file extensions as string or list of strings
 		allowDirs       = false                                          // allow directories
 		allowFiles      = true                                           // allow files
@@ -280,6 +311,7 @@ func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, ar
 		"title?", &title,
 		"description?", &description,
 		"validate?", &validateFunc,
+		"cursor?", &cursor,
 		"allow_ext?", allowExtensions,
 		"allow_dir?", &allowDirs,
 		"allow_file?", &allowFiles,
@@ -293,8 +325,9 @@ func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, ar
 		return starlark.None, err
 	}
 
-	// convert allowed extensions
-	extensions := convertListToStrings(allowExtensions)
+	// convert allowed extensions, normalizing each to the ".ext" form the picker
+	// matches against by suffix ("py"/".py"/"*.py" -> ".py"); empties are dropped.
+	extensions := normalizeExtList(convertListToStrings(allowExtensions))
 
 	// get initial path
 	path, err := filepath.Abs(initialPath)
@@ -308,6 +341,7 @@ func (m *Module) starFilePicker(thread *starlark.Thread, b *starlark.Builtin, ar
 		huh.NewGroup(
 			huh.NewFilePicker().
 				Picking(true).
+				Cursor(cursor).
 				CurrentDirectory(path).
 				Title(title).
 				Description(description).

@@ -248,9 +248,9 @@ timed out.
 ### `file_pick`
 
 ```text
-file_pick(path=".", title="", description="", validate=None, allow_ext=[],
-          allow_dir=False, allow_file=True, show_hidden=False, show_perm=True,
-          show_size=False, height=10, show_help=True, timeout=0)
+file_pick(path=".", title="", description="", validate=None, cursor=">",
+          allow_ext=[], allow_dir=False, allow_file=True, show_hidden=False,
+          show_perm=True, show_size=False, height=10, show_help=True, timeout=0)
 ```
 
 Creates a file picker component. The starting path is resolved to an absolute
@@ -262,8 +262,10 @@ Parameters:
 - `title`: Title text (default: `""`).
 - `description`: Description text (default: `""`).
 - `validate`: Validation function (default: `None`); same contract as `input`.
-- `allow_ext`: Allowed file extensions as a string or list of strings
-  (default: `[]` — all).
+- `cursor`: Cursor glyph drawn next to the highlighted entry (default: `">"`).
+- `allow_ext`: Allowed file extensions as a string or list of strings (default:
+  `[]` — all). Each entry is normalized to a leading-dot suffix, so `"py"`,
+  `".py"`, and `"*.py"` are equivalent; entries with no extension are ignored.
 - `allow_dir`: Allow directory selection (default: `False`).
 - `allow_file`: Allow file selection (default: `True`).
 - `show_hidden`: Show hidden files (default: `False`).
