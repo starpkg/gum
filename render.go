@@ -250,53 +250,62 @@ func applyStyleBox(st lipgloss.Style, border, align *types.NullableStringOrBytes
 // non-interactive equivalent of `gum style`).
 // def style(text, fg="", bg="", bold=False, italic=False, underline=False, faint=False, border="", border_fg="", padding=None, margin=None, width=0, align="") -> str
 func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var (
-		text      = types.StringOrBytes("")            // text to style
-		fg        = types.NewNullableStringOrBytes("") // foreground color
-		bg        = types.NewNullableStringOrBytes("") // background color
-		bold      = false                              // bold text
-		italic    = false                              // italic text
-		underline = false                              // underlined text
-		faint     = false                              // faint text
-		border    = types.NewNullableStringOrBytes("") // border style name
-		borderFg  = types.NewNullableStringOrBytes("") // border foreground color
-		padding   starlark.Value                       // int or (top,right,bottom,left) ints
-		margin    starlark.Value                       // int or (top,right,bottom,left) ints
-		width     = 0                                  // fixed width (0 = natural)
-		align     = types.NewNullableStringOrBytes("") // horizontal alignment
-	)
-	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"text", &text,
-		"fg?", fg,
-		"bg?", bg,
-		"bold?", &bold,
-		"italic?", &italic,
-		"underline?", &underline,
-		"faint?", &faint,
-		"border?", border,
-		"border_fg?", borderFg,
-		"padding?", &padding,
-		"margin?", &margin,
-		"width?", &width,
-		"align?", align,
-	); err != nil {
+	a, err := unpackStyleArgs(b, args, kwargs)
+	if err != nil {
 		return none, err
 	}
-
 	st := lipgloss.NewStyle()
-	st, err := applyStyleColors(st, fg, bg, borderFg)
-	if err != nil {
+	if st, err = applyStyleColors(st, a.fg, a.bg, a.borderFg); err != nil {
 		return none, err
 	}
-	st = applyTextAttrs(st, bold, italic, underline, faint)
-	st, err = applyStyleBox(st, border, align, padding, margin)
-	if err != nil {
+	st = applyTextAttrs(st, a.bold, a.italic, a.underline, a.faint)
+	if st, err = applyStyleBox(st, a.border, a.align, a.padding, a.margin); err != nil {
 		return none, err
 	}
-	if width > 0 {
-		st = st.Width(width)
+	if a.width > 0 {
+		st = st.Width(a.width)
 	}
-	return starlark.String(st.Render(text.GoString())), nil
+	return starlark.String(st.Render(a.text.GoString())), nil
+}
+
+// styleArgs holds the parsed arguments for the style builtin.
+type styleArgs struct {
+	text             types.StringOrBytes
+	fg, bg           *types.NullableStringOrBytes
+	bold, italic     bool
+	underline, faint bool
+	border, borderFg *types.NullableStringOrBytes
+	padding, margin  starlark.Value
+	width            int
+	align            *types.NullableStringOrBytes
+}
+
+// unpackStyleArgs parses the style() arguments into a styleArgs.
+func unpackStyleArgs(b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (*styleArgs, error) {
+	a := &styleArgs{
+		text:     types.StringOrBytes(""),
+		fg:       types.NewNullableStringOrBytes(""),
+		bg:       types.NewNullableStringOrBytes(""),
+		border:   types.NewNullableStringOrBytes(""),
+		borderFg: types.NewNullableStringOrBytes(""),
+		align:    types.NewNullableStringOrBytes(""),
+	}
+	err := starlark.UnpackArgs(b.Name(), args, kwargs,
+		"text", &a.text,
+		"fg?", a.fg,
+		"bg?", a.bg,
+		"bold?", &a.bold,
+		"italic?", &a.italic,
+		"underline?", &a.underline,
+		"faint?", &a.faint,
+		"border?", a.border,
+		"border_fg?", a.borderFg,
+		"padding?", &a.padding,
+		"margin?", &a.margin,
+		"width?", &a.width,
+		"align?", a.align,
+	)
+	return a, err
 }
 
 // starTable is a Starlark function to render a bordered table with lipgloss.
