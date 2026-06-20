@@ -93,6 +93,7 @@ parameters, returns, errors, and examples.
 | `write` | Multi-line text area, with optional external editor support. |
 | `select` | Single-selection from a list or dict of options. |
 | `multi_select` | Multi-selection with an optional selection limit. |
+| `filter` | Fuzzy-filter a list as you type (single or multi-select). |
 | `confirm` | Yes/No confirmation dialog. |
 | `file_pick` | File/directory picker with extension and visibility filters. |
 | `note` | Display an informational note with a title and description. |

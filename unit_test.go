@@ -700,6 +700,8 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"table non-list headers", `load("gum","table")` + "\n" + `table("nope", [])`, "headers:"},
 		{"table bad row", `load("gum","table")` + "\n" + `table(["h"], ["notarow"])`, "row 0"},
 		{"table bad border", `load("gum","table")` + "\n" + `table(["h"], [["a"]], border="bogus")`, "unsupported border style"},
+		{"filter empty options", `load("gum","filter")` + "\n" + `filter([])`, "options must not be empty"},
+		{"filter non-iterable", `load("gum","filter")` + "\n" + `filter(123)`, "iterable or mapping"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -876,6 +878,119 @@ check()`,
 	}
 }
 
+// --- filter (fuzzy ranking + window) ----------------------------------------
+
+// TestFuzzyRank covers the pure ranking behind the filter builtin: empty query
+// returns every index in order, fuzzy ranks subsequence matches, and the
+// non-fuzzy path is a plain case-insensitive substring filter. The interactive
+// picker itself is TTY-only.
+func TestFuzzyRank(t *testing.T) {
+	items := []string{"starlight", "starlet", "starbox", "starcli"}
+	if got := fuzzyRank(items, "", true); len(got) != 4 || got[0] != 0 || got[3] != 3 {
+		t.Errorf("empty query -> %v, want [0 1 2 3]", got)
+	}
+	// fuzzy "sb": only starbox has 's' then 'b' as a subsequence.
+	if got := fuzzyRank(items, "sb", true); len(got) == 0 || items[got[0]] != "starbox" {
+		t.Errorf("fuzzy %q -> %v, want starbox first", "sb", got)
+	}
+	// non-fuzzy substring "let" matches only starlet.
+	if got := fuzzyRank(items, "let", false); len(got) != 1 || items[got[0]] != "starlet" {
+		t.Errorf("substr %q -> %v, want [starlet]", "let", got)
+	}
+	if got := fuzzyRank(items, "zzz", false); len(got) != 0 {
+		t.Errorf("no-match -> %v, want empty", got)
+	}
+}
+
+func TestFilterWindow(t *testing.T) {
+	cases := []struct {
+		cursor, n, height  int
+		wantStart, wantEnd int
+	}{
+		{0, 5, 0, 0, 5},   // height<=0 -> full range
+		{2, 3, 10, 0, 3},  // height>=n -> full range
+		{0, 10, 4, 0, 4},  // cursor at top
+		{5, 10, 4, 3, 7},  // cursor in middle, centered
+		{9, 10, 4, 6, 10}, // cursor near end, clamped
+	}
+	for _, c := range cases {
+		if s, e := filterWindow(c.cursor, c.n, c.height); s != c.wantStart || e != c.wantEnd {
+			t.Errorf("filterWindow(%d,%d,%d) = %d,%d, want %d,%d", c.cursor, c.n, c.height, s, e, c.wantStart, c.wantEnd)
+		}
+	}
+}
+
+// TestFilterModelLogic drives the filter picker's model headlessly: only the
+// bubbletea Run loop needs a TTY, so the navigation/selection logic, View
+// rendering, and result mapping are all exercised here by calling the model's
+// methods directly.
+func TestFilterModelLogic(t *testing.T) {
+	opts := []huh.Option[string]{
+		huh.NewOption("starlight", "L1"),
+		huh.NewOption("starlet", "L2"),
+		huh.NewOption("starbox", "L4"),
+	}
+
+	// single-select: navigate (with boundary clamping) then confirm returns the
+	// highlighted option's Value.
+	m := newFilterModel(opts, "", "Filter...", "Pick a layer", true, 1, 10)
+	if len(m.filtered) != 3 {
+		t.Fatalf("initial filtered = %v, want 3 entries", m.filtered)
+	}
+	m.move(1)
+	if m.cursor != 1 {
+		t.Errorf("after move(1) cursor = %d, want 1", m.cursor)
+	}
+	m.move(-1)
+	m.move(-1) // already at 0, stays clamped
+	if m.cursor != 0 {
+		t.Errorf("after move(-1)x2 cursor = %d, want 0", m.cursor)
+	}
+	if cmd, handled := m.handleKey("enter"); !handled || cmd == nil {
+		t.Errorf("handleKey(enter) = %v,%v; want a quit cmd and handled", cmd, handled)
+	}
+	if len(m.chosen) != 1 || m.chosen[0] != "L1" {
+		t.Errorf("chosen = %v, want [L1]", m.chosen)
+	}
+
+	// View carries the title, the query input, and the items.
+	if v := m.View().Content; !strings.Contains(v, "Pick a layer") || !strings.Contains(v, "starlight") {
+		t.Errorf("View content missing expected pieces:\n%s", v)
+	}
+
+	// refilter narrows to a fuzzy match.
+	m.ti.SetValue("box")
+	m.refilter()
+	if len(m.filtered) != 1 || m.keys[m.filtered[0]] != "starbox" {
+		t.Errorf("after refilter(box) filtered = %v", m.filtered)
+	}
+
+	// esc aborts.
+	ma := newFilterModel(opts, "", "", "", true, 1, 10)
+	if _, handled := ma.handleKey("esc"); !handled || !ma.aborted {
+		t.Errorf("esc should abort; handled=%v aborted=%v", handled, ma.aborted)
+	}
+
+	// multi-select: Tab marks, confirm returns marked Values in option order.
+	mm := newFilterModel(opts, "", "", "", true, 0, 10)
+	mm.handleKey("tab") // mark option 0 -> L1
+	mm.move(1)
+	mm.move(1)          // cursor -> option 2
+	mm.handleKey("tab") // mark option 2 -> L4
+	mm.confirm()
+	if len(mm.chosen) != 2 || mm.chosen[0] != "L1" || mm.chosen[1] != "L4" {
+		t.Errorf("multi chosen = %v, want [L1 L4]", mm.chosen)
+	}
+
+	// filterResult: single returns a string; an aborted model returns None.
+	if got := filterResult(m, 1); got != starlark.String("L1") {
+		t.Errorf("filterResult(single) = %v, want L1", got)
+	}
+	if got := filterResult(ma, 1); got != starlark.None {
+		t.Errorf("filterResult(aborted) = %v, want None", got)
+	}
+}
+
 // --- backward compatibility -------------------------------------------------
 
 // TestNewModuleDefaults pins the historical default surface (width 50, height 0,
@@ -965,7 +1080,7 @@ func TestLoadModuleRegistersBuiltins(t *testing.T) {
 	want := []string{
 		"write", "input", "select", "multi_select", "confirm", "note",
 		"md", "md_note", "spin", "file_pick", "colorize", "set_theme",
-		"style", "table", "tree",
+		"style", "table", "tree", "filter",
 		"get_width", "set_width", "get_height", "set_height",
 		"get_theme", "get_editor", "set_editor",
 	}
