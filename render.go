@@ -2,6 +2,7 @@ package gum
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -61,39 +62,24 @@ func toIntList(v starlark.Value) ([]int, error) {
 	if v == nil || v == starlark.None {
 		return nil, nil
 	}
-	appendInt := func(out []int, e starlark.Value) ([]int, error) {
+	if i, ok := v.(starlark.Int); ok {
+		n, _ := i.Int64()
+		return []int{int(n)}, nil
+	}
+	elems, err := iterValues(v)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]int, 0, len(elems))
+	for _, e := range elems {
 		n, ok := e.(starlark.Int)
 		if !ok {
 			return nil, fmt.Errorf("expected int, got %s", e.Type())
 		}
 		i, _ := n.Int64()
-		return append(out, int(i)), nil
+		out = append(out, int(i))
 	}
-	switch t := v.(type) {
-	case starlark.Int:
-		i, _ := t.Int64()
-		return []int{int(i)}, nil
-	case *starlark.List:
-		out := make([]int, 0, t.Len())
-		var err error
-		for i := 0; i < t.Len(); i++ {
-			if out, err = appendInt(out, t.Index(i)); err != nil {
-				return nil, err
-			}
-		}
-		return out, nil
-	case starlark.Tuple:
-		out := make([]int, 0, len(t))
-		var err error
-		for _, e := range t {
-			if out, err = appendInt(out, e); err != nil {
-				return nil, err
-			}
-		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf("expected int or list/tuple of ints, got %s", v.Type())
-	}
+	return out, nil
 }
 
 // starStringSlice converts a Starlark list/tuple/iterable to a []string,
@@ -174,6 +160,92 @@ func iterValues(v starlark.Value) ([]starlark.Value, error) {
 	}
 }
 
+// applyColor parses a gum color string and applies it to st via set; an empty
+// value leaves st unchanged.
+func applyColor(st lipgloss.Style, v *types.NullableStringOrBytes, set func(lipgloss.Style, color.Color) lipgloss.Style) (lipgloss.Style, error) {
+	if v.IsNullOrEmpty() {
+		return st, nil
+	}
+	c, err := ParseColor(v.GoString())
+	if err != nil {
+		return st, err
+	}
+	return set(st, c), nil
+}
+
+// applyStyleColors applies the foreground, background, and border colors,
+// prefixing any parse error with the offending field name.
+func applyStyleColors(st lipgloss.Style, fg, bg, borderFg *types.NullableStringOrBytes) (lipgloss.Style, error) {
+	var err error
+	if st, err = applyColor(st, fg, lipgloss.Style.Foreground); err != nil {
+		return st, fmt.Errorf("fg: %w", err)
+	}
+	if st, err = applyColor(st, bg, lipgloss.Style.Background); err != nil {
+		return st, fmt.Errorf("bg: %w", err)
+	}
+	setBorderFg := func(s lipgloss.Style, c color.Color) lipgloss.Style { return s.BorderForeground(c) }
+	if st, err = applyColor(st, borderFg, setBorderFg); err != nil {
+		return st, fmt.Errorf("border_fg: %w", err)
+	}
+	return st, nil
+}
+
+// applyTextAttrs applies the boolean text attributes.
+func applyTextAttrs(st lipgloss.Style, bold, italic, underline, faint bool) lipgloss.Style {
+	if bold {
+		st = st.Bold(true)
+	}
+	if italic {
+		st = st.Italic(true)
+	}
+	if underline {
+		st = st.Underline(true)
+	}
+	if faint {
+		st = st.Faint(true)
+	}
+	return st
+}
+
+// applySpacing applies a CSS-style spacing value (int, or list/tuple of ints)
+// to st via set, leaving st unchanged when the value is unset.
+func applySpacing(st lipgloss.Style, v starlark.Value, set func(lipgloss.Style, ...int) lipgloss.Style) (lipgloss.Style, error) {
+	p, err := toIntList(v)
+	if err != nil {
+		return st, err
+	}
+	if len(p) > 0 {
+		st = set(st, p...)
+	}
+	return st, nil
+}
+
+// applyStyleBox applies the border, padding/margin spacing, and alignment.
+func applyStyleBox(st lipgloss.Style, border, align *types.NullableStringOrBytes, padding, margin starlark.Value) (lipgloss.Style, error) {
+	if !border.IsNullOrEmpty() {
+		bd, err := parseBorder(border.GoString())
+		if err != nil {
+			return st, err
+		}
+		st = st.Border(bd)
+	}
+	var err error
+	if st, err = applySpacing(st, padding, lipgloss.Style.Padding); err != nil {
+		return st, fmt.Errorf("padding: %w", err)
+	}
+	if st, err = applySpacing(st, margin, lipgloss.Style.Margin); err != nil {
+		return st, fmt.Errorf("margin: %w", err)
+	}
+	if !align.IsNullOrEmpty() {
+		p, err := parseAlign(align.GoString())
+		if err != nil {
+			return st, err
+		}
+		st = st.Align(p)
+	}
+	return st, nil
+}
+
 // starStyle is a Starlark function to render styled text with lipgloss (the
 // non-interactive equivalent of `gum style`).
 // def style(text, fg="", bg="", bold=False, italic=False, underline=False, faint=False, border="", border_fg="", padding=None, margin=None, width=0, align="") -> str
@@ -212,65 +284,17 @@ func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args st
 	}
 
 	st := lipgloss.NewStyle()
-	if !fg.IsNullOrEmpty() {
-		c, err := ParseColor(fg.GoString())
-		if err != nil {
-			return none, fmt.Errorf("fg: %w", err)
-		}
-		st = st.Foreground(c)
+	st, err := applyStyleColors(st, fg, bg, borderFg)
+	if err != nil {
+		return none, err
 	}
-	if !bg.IsNullOrEmpty() {
-		c, err := ParseColor(bg.GoString())
-		if err != nil {
-			return none, fmt.Errorf("bg: %w", err)
-		}
-		st = st.Background(c)
-	}
-	if bold {
-		st = st.Bold(true)
-	}
-	if italic {
-		st = st.Italic(true)
-	}
-	if underline {
-		st = st.Underline(true)
-	}
-	if faint {
-		st = st.Faint(true)
-	}
-	if !border.IsNullOrEmpty() {
-		bd, err := parseBorder(border.GoString())
-		if err != nil {
-			return none, err
-		}
-		st = st.Border(bd)
-	}
-	if !borderFg.IsNullOrEmpty() {
-		c, err := ParseColor(borderFg.GoString())
-		if err != nil {
-			return none, fmt.Errorf("border_fg: %w", err)
-		}
-		st = st.BorderForeground(c)
-	}
-	if p, err := toIntList(padding); err != nil {
-		return none, fmt.Errorf("padding: %w", err)
-	} else if len(p) > 0 {
-		st = st.Padding(p...)
-	}
-	if mg, err := toIntList(margin); err != nil {
-		return none, fmt.Errorf("margin: %w", err)
-	} else if len(mg) > 0 {
-		st = st.Margin(mg...)
+	st = applyTextAttrs(st, bold, italic, underline, faint)
+	st, err = applyStyleBox(st, border, align, padding, margin)
+	if err != nil {
+		return none, err
 	}
 	if width > 0 {
 		st = st.Width(width)
-	}
-	if !align.IsNullOrEmpty() {
-		p, err := parseAlign(align.GoString())
-		if err != nil {
-			return none, err
-		}
-		st = st.Align(p)
 	}
 	return starlark.String(st.Render(text.GoString())), nil
 }
