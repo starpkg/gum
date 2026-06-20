@@ -101,15 +101,17 @@ parameters, returns, errors, and examples.
 | `md_note` | Render Markdown and display it in a TUI note. |
 | `spin` | Show a spinner, optionally running an action while it spins. |
 | `colorize` | Colorize text with a solid color or a gradient (non-interactive). |
+| `code_block` | Syntax-highlight source code to ANSI via chroma (non-interactive). |
 | `style` | Render styled text — colors, attributes, border, padding (non-interactive). |
 | `table` | Render a bordered table from headers and rows (non-interactive). |
 | `tree` | Render a nested tree from a dict/list (non-interactive). |
+| `compose` | Join rendered blocks into a layout, horizontally or vertically (non-interactive). |
 | `set_theme` | Set the active theme and re-apply it immediately. |
 
 > **TTY note.** The interactive builtins drive the host's controlling terminal
 > and fail with `could not open a new TTY` in headless environments (CI,
-> sandboxes). `md`, `colorize`, `style`, `table`, and `tree` are
-> non-interactive and run anywhere.
+> sandboxes). `md`, `colorize`, `code_block`, `style`, `table`, `tree`, and
+> `compose` are non-interactive and run anywhere.
 
 ## Configuration
 
