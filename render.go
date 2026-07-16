@@ -358,48 +358,63 @@ func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args st
 	return starlark.String(st.Render(text)), nil
 }
 
+// tabCells upper-bounds the display width lipgloss gives a tab. Its default tab
+// width is 4; 8 is a safe over-estimate (ansi.StringWidth counts a tab as 0, so
+// tab-heavy lines must be measured separately or they under-count).
+const tabCells = 8
+
 // styleAreaBound returns a conservative upper bound on the number of cells
-// lipgloss will produce for text under style st. Output lines ≤ input lines +
-// wrap-induced extra lines + vertical frame; output width ≤ the fixed width (or
-// the widest line when width is unset) + horizontal frame. When a fixed width is
-// set, lipgloss wraps content at width−horizontalPadding, so a large left/right
-// padding can multiply the line count — that is captured via wrapWidth.
+// lipgloss will produce for text under style st, so no width/padding/margin/
+// border/line-count combination can amplify a small input into a huge render.
+//
+// Output cells = output lines × output width. lipgloss wraps content at the
+// effective width (fixed width − horizontal padding − border columns); when that
+// is ≥1 the content is wrapped to the fixed width, and when it is ≤0 (or no width
+// is set) wrapping is skipped and every line keeps its full width, which
+// alignment then equalizes. Both regimes are bounded here.
 func styleAreaBound(text string, st lipgloss.Style) int64 {
-	inputLines := int64(strings.Count(text, "\n")) + 1
+	inputLines, longest, totalCells := styleContentMetrics(text)
 	frameH := int64(st.GetHorizontalFrameSize())
 	frameV := int64(st.GetVerticalFrameSize())
+	hPad := int64(st.GetHorizontalPadding())
+	borderH := frameH - hPad - int64(st.GetHorizontalMargins())
 	width := int64(st.GetWidth())
 
-	var outLines, outWidth int64
-	if width > 0 {
-		wrapWidth := width - int64(st.GetHorizontalPadding())
-		if wrapWidth < 1 {
-			wrapWidth = 1
-		}
-		// Each content byte can contribute at most one extra wrapped line
-		// (wrapWidth ≥ 1); len(text) is a safe upper bound on the total.
-		outLines = inputLines + int64(len(text))/wrapWidth + frameV
+	var outWidth, wrapExtra int64
+	switch effWidth := width - hPad - borderH; {
+	case width > 0 && effWidth >= 1:
+		// Content wraps to the fixed width; wrapped rows ≤ totalCells/effWidth.
 		outWidth = width + frameH
-	} else {
-		outLines = inputLines + frameV
-		outWidth = int64(longestLineWidth(text)) + frameH
+		wrapExtra = totalCells / effWidth
+	default:
+		// width==0, or the frame leaves no room to wrap: lines keep full width.
+		outWidth = max(width, longest) + frameH
 	}
-	return outLines * outWidth
+	return (inputLines + wrapExtra + frameV) * outWidth
 }
 
-// longestLineWidth returns the maximum display width among the newline-separated
-// segments of text.
-func longestLineWidth(text string) int {
-	longest, start := 0, 0
+// styleContentMetrics returns, in one pass, the number of newline-separated
+// lines, the widest line's display width, and the total display width across all
+// lines. Tab cells are counted at tabCells because lipgloss expands tabs on
+// render while ansi.StringWidth reports them as zero.
+func styleContentMetrics(text string) (lines, longest, totalCells int64) {
+	lines = 1
+	start := 0
 	for i := 0; i <= len(text); i++ {
 		if i == len(text) || text[i] == '\n' {
-			if w := lipgloss.Width(text[start:i]); w > longest {
+			seg := text[start:i]
+			w := int64(lipgloss.Width(seg)) + tabCells*int64(strings.Count(seg, "\t"))
+			totalCells += w
+			if w > longest {
 				longest = w
+			}
+			if i < len(text) {
+				lines++
 			}
 			start = i + 1
 		}
 	}
-	return longest
+	return lines, longest, totalCells
 }
 
 // maxStyleDimension bounds a script-supplied width / padding / margin so a huge

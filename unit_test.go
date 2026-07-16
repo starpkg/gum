@@ -704,6 +704,8 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"style width x lines amplification", `load("gum","style")` + "\n" + `style("x\n" * 100000, width=10000)`, "cells"},
 		{"style padding-shrunk wrap amplification", `load("gum","style")` + "\n" + `style("x" * 1001, width=10000, padding=(0, 0, 0, 9999))`, "cells"},
 		{"style width0 equalize amplification", `load("gum","style")` + "\n" + `style("x" * 10000 + "\n" * 10000)`, "cells"},
+		{"style border-skipped-wrap amplification", `load("gum","style")` + "\n" + `style("x" * 6000, width=1, border="normal", align="center", padding=(5000, 0, 5000, 0), margin=(5000, 0, 5000, 0))`, "cells"},
+		{"style tab-expansion amplification", `load("gum","style")` + "\n" + `style("\t" * 1500, padding=(10000, 0, 10000, 0))`, "cells"},
 		{"tree too deep", "load(\"gum\",\"tree\")\ndef deep(n):\n    d = {\"leaf\": 1}\n    for i in range(n):\n        d = {\"k\": d}\n    return d\ntree(deep(2000))", "tree nesting exceeds"},
 		{"table non-list headers", `load("gum","table")` + "\n" + `table("nope", [])`, "headers:"},
 		{"table bad row", `load("gum","table")` + "\n" + `table(["h"], ["notarow"])`, "row 0"},
@@ -892,6 +894,15 @@ check()`,
 def check():
     r = style("line\n" * 500, width = 80, margin = -3)
     if "line" not in r:
+        fail("missing text")
+check()`,
+		// A long single line wrapped to a real width is legitimate (output ≈ input,
+		// not amplified) and must NOT be rejected: the wrap branch bounds it by the
+		// fixed width, not the unwrapped length.
+		"style long line wraps ok": `load("gum", "style")
+def check():
+    r = style("x" * 100000, width = 80)
+    if "x" not in r:
         fail("missing text")
 check()`,
 		"table": `load("gum", "table")
