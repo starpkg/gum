@@ -567,14 +567,21 @@ Parameters:
   (default: `""` — no border).
 - `border_fg`: Border foreground color (default: `""`).
 - `padding` / `margin`: Inside / outside spacing, as an int (all sides) or a
-  list/tuple of ints in CSS order (1, 2, or 4 values; default: `None`).
+  list/tuple of **at most 4** ints in CSS order (1, 2, or 4 values; default:
+  `None`).
 - `width`: Fixed render width (default: `0` — natural width). Bounded at `10000`.
 - `align`: Horizontal alignment of wrapped/padded text — `"left"`, `"center"`,
   or `"right"` (default: `""` — left).
 
 Returns the rendered string. Errors on an unknown color, border, or alignment
-name, a non-int padding/margin, or a `width`/`padding`/`margin` above `10000` (a
-guard so a huge value can't drive lipgloss into a multi-gigabyte allocation).
+name, a non-int padding/margin, or a `width`/`padding`/`margin` above `10000`.
+These are DoS guards so a huge value can't drive lipgloss into a multi-gigabyte
+allocation, and they close every amplification path: an out-of-range integer
+(e.g. `1<<100`) is rejected rather than silently wrapping to `0`; a
+padding/margin iterable is capped at 4 values so an unbounded one (e.g.
+`range(1e9)`) can't be materialized; and the padded area (line count × `width`)
+is bounded at 10 million cells so many short lines plus a large `width` can't
+amplify a tiny input into an OOM.
 
 ```python
 load("gum", "style")

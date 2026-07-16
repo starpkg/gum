@@ -71,6 +71,23 @@ func parsePosition(name string) (lipgloss.Position, error) {
 	}
 }
 
+// maxSpacingValues bounds a padding/margin value list. CSS-style spacing takes
+// at most 4 components (top/right/bottom/left); a longer list is a mistake, and
+// capping it stops an unbounded iterable (e.g. range(1e9)) from being fully
+// materialized before its values are validated.
+const maxSpacingValues = 4
+
+// spacingInt converts a Starlark int to a Go int, rejecting a value that does
+// not fit int64. Without this an out-of-range int (e.g. 1<<100) would silently
+// wrap to 0 and slip past the maxStyleDimension check in applySpacing.
+func spacingInt(i starlark.Int) (int, error) {
+	n, ok := i.Int64()
+	if !ok {
+		return 0, fmt.Errorf("value %s is out of range", i.String())
+	}
+	return int(n), nil
+}
+
 // toIntList converts a Starlark int, or a list/tuple of ints, to a []int. It is
 // used for CSS-style padding/margin (1, 2, or 4 values). A None value yields a
 // nil slice (meaning "unset").
@@ -79,21 +96,33 @@ func toIntList(v starlark.Value) ([]int, error) {
 		return nil, nil
 	}
 	if i, ok := v.(starlark.Int); ok {
-		n, _ := i.Int64()
-		return []int{int(n)}, nil
+		n, err := spacingInt(i)
+		if err != nil {
+			return nil, err
+		}
+		return []int{n}, nil
 	}
-	elems, err := iterValues(v)
+	elems, err := iterValuesCapped(v, maxSpacingValues)
 	if err != nil {
 		return nil, err
 	}
+	return intsFromValues(elems)
+}
+
+// intsFromValues converts a slice of Starlark values to []int, rejecting a
+// non-int or an out-of-range int.
+func intsFromValues(elems []starlark.Value) ([]int, error) {
 	out := make([]int, 0, len(elems))
 	for _, e := range elems {
 		n, ok := e.(starlark.Int)
 		if !ok {
 			return nil, fmt.Errorf("expected int, got %s", e.Type())
 		}
-		i, _ := n.Int64()
-		out = append(out, int(i))
+		m, err := spacingInt(n)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
 	}
 	return out, nil
 }
@@ -144,6 +173,31 @@ func starStringMatrix(v starlark.Value) ([][]string, error) {
 			return nil, fmt.Errorf("row %d: %w", i, err)
 		}
 		out = append(out, row)
+	}
+	return out, nil
+}
+
+// iterValuesCapped returns the elements of a Starlark list/tuple/iterable as a
+// slice, but errors after max elements instead of materializing an unbounded
+// iterable (e.g. range(1e9)) before the caller can validate its values. It
+// terminates early even for a huge concrete list, so nothing is fully copied.
+func iterValuesCapped(v starlark.Value, limit int) ([]starlark.Value, error) {
+	if _, ok := v.(starlark.String); ok {
+		return nil, fmt.Errorf("expected a list/tuple, got string")
+	}
+	it, ok := v.(starlark.Iterable)
+	if !ok {
+		return nil, fmt.Errorf("expected a list/tuple, got %s", v.Type())
+	}
+	out := make([]starlark.Value, 0, limit)
+	iter := it.Iterate()
+	defer iter.Done()
+	var e starlark.Value
+	for iter.Next(&e) {
+		if len(out) >= limit {
+			return nil, fmt.Errorf("expected at most %d values", limit)
+		}
+		out = append(out, e)
 	}
 	return out, nil
 }
@@ -283,19 +337,31 @@ func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args st
 	if st, err = applyStyleBox(st, a.border, a.align, a.padding, a.margin); err != nil {
 		return none, err
 	}
+	text := a.text.GoString()
 	if a.width > 0 {
 		if a.width > maxStyleDimension {
 			return none, fmt.Errorf("%s: width %d exceeds the maximum of %d", b.Name(), a.width, maxStyleDimension)
 		}
+		// Padding each line up to width amplifies a small input into width×lines
+		// cells; bound that product so many short lines + a large width can't OOM.
+		lines := strings.Count(text, "\n") + 1
+		if int64(lines)*int64(a.width) > maxStyleCells {
+			return none, fmt.Errorf("%s: rendered area (%d lines × width %d) exceeds the maximum of %d cells", b.Name(), lines, a.width, maxStyleCells)
+		}
 		st = st.Width(a.width)
 	}
-	return starlark.String(st.Render(a.text.GoString())), nil
+	return starlark.String(st.Render(text)), nil
 }
 
 // maxStyleDimension bounds a script-supplied width / padding / margin so a huge
 // value can't drive lipgloss into a multi-gigabyte padded-string allocation
 // (OOM). It is far above any real terminal width.
 const maxStyleDimension = 10000
+
+// maxStyleCells bounds the padded render area (line count × width) so a small
+// input can't be amplified — by combining many lines with a large width — into a
+// multi-gigabyte allocation. 10 million cells is far beyond any real render.
+const maxStyleCells = 10_000_000
 
 // styleArgs holds the parsed arguments for the style builtin.
 type styleArgs struct {

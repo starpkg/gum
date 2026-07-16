@@ -699,6 +699,9 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"style bad padding", `load("gum","style")` + "\n" + `style("x", padding="lots")`, "padding:"},
 		{"style width too large", `load("gum","style")` + "\n" + `style("x", width=99999)`, "exceeds the maximum"},
 		{"style padding too large", `load("gum","style")` + "\n" + `style("x", padding=99999)`, "exceeds the maximum"},
+		{"style padding oversized int", `load("gum","style")` + "\n" + `style("x", padding=1<<100)`, "out of range"},
+		{"style padding unbounded iterable", `load("gum","style")` + "\n" + `style("x", padding=range(1000000))`, "at most"},
+		{"style width x lines amplification", `load("gum","style")` + "\n" + `style("x\n" * 100000, width=10000)`, "cells"},
 		{"tree too deep", "load(\"gum\",\"tree\")\ndef deep(n):\n    d = {\"leaf\": 1}\n    for i in range(n):\n        d = {\"k\": d}\n    return d\ntree(deep(2000))", "tree nesting exceeds"},
 		{"table non-list headers", `load("gum","table")` + "\n" + `table("nope", [])`, "headers:"},
 		{"table bad row", `load("gum","table")` + "\n" + `table(["h"], ["notarow"])`, "row 0"},
@@ -795,6 +798,27 @@ func TestToIntList(t *testing.T) {
 	}
 	if _, err := toIntList(starlark.String("x")); err == nil {
 		t.Error("string should error")
+	}
+	// An out-of-range int must error, not silently wrap to 0 (which would slip
+	// past the maxStyleDimension check).
+	huge := starlark.MakeInt(1).Lsh(100)
+	if _, err := toIntList(huge); err == nil {
+		t.Error("oversized int should error, not wrap to 0")
+	}
+	if _, err := toIntList(starlark.NewList([]starlark.Value{starlark.MakeInt(1), huge})); err == nil {
+		t.Error("oversized int in a list should error")
+	}
+	// More than maxSpacingValues (4) elements is rejected before materialization.
+	tooMany := make([]starlark.Value, maxSpacingValues+1)
+	for i := range tooMany {
+		tooMany[i] = starlark.MakeInt(0)
+	}
+	if _, err := toIntList(starlark.NewList(tooMany)); err == nil {
+		t.Errorf("more than %d spacing values should error", maxSpacingValues)
+	}
+	// Exactly maxSpacingValues is allowed.
+	if got, err := toIntList(starlark.NewList(tooMany[:maxSpacingValues])); err != nil || len(got) != maxSpacingValues {
+		t.Errorf("%d spacing values should be allowed: %v, %v", maxSpacingValues, got, err)
 	}
 }
 
