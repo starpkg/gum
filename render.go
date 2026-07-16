@@ -77,13 +77,16 @@ func parsePosition(name string) (lipgloss.Position, error) {
 // materialized before its values are validated.
 const maxSpacingValues = 4
 
-// spacingInt converts a Starlark int to a Go int, rejecting a value that does
-// not fit int64. Without this an out-of-range int (e.g. 1<<100) would silently
-// wrap to 0 and slip past the maxStyleDimension check in applySpacing.
+// spacingInt converts a Starlark int to a Go int, rejecting anything outside
+// [-maxStyleDimension, maxStyleDimension]. The range check is done at int64
+// precision *before* narrowing to int, so a huge value can neither wrap to 0
+// (masking the maxStyleDimension guard) nor truncate on a 32-bit platform where
+// int is 32-bit. Spacing is bounded at maxStyleDimension anyway, so this is the
+// same limit applyStyleBox enforces, just applied soundly.
 func spacingInt(i starlark.Int) (int, error) {
 	n, ok := i.Int64()
-	if !ok {
-		return 0, fmt.Errorf("value %s is out of range", i.String())
+	if !ok || n > maxStyleDimension || n < -maxStyleDimension {
+		return 0, fmt.Errorf("value %s is out of range (max %d)", i.String(), maxStyleDimension)
 	}
 	return int(n), nil
 }
@@ -280,14 +283,11 @@ func applyTextAttrs(st lipgloss.Style, bold, italic, underline, faint bool) lipg
 // applySpacing applies a CSS-style spacing value (int, or list/tuple of ints)
 // to st via set, leaving st unchanged when the value is unset.
 func applySpacing(st lipgloss.Style, v starlark.Value, set func(lipgloss.Style, ...int) lipgloss.Style) (lipgloss.Style, error) {
+	// toIntList (via spacingInt) already bounds every value to maxStyleDimension,
+	// so no further range check is needed here.
 	p, err := toIntList(v)
 	if err != nil {
 		return st, err
-	}
-	for _, n := range p {
-		if n > maxStyleDimension {
-			return st, fmt.Errorf("value %d exceeds the maximum of %d", n, maxStyleDimension)
-		}
 	}
 	if len(p) > 0 {
 		st = set(st, p...)
