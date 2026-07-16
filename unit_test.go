@@ -698,11 +698,12 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"style bad align", `load("gum","style")` + "\n" + `style("x", align="sideways")`, "unsupported align"},
 		{"style bad padding", `load("gum","style")` + "\n" + `style("x", padding="lots")`, "padding:"},
 		{"style width too large", `load("gum","style")` + "\n" + `style("x", width=99999)`, "exceeds the maximum"},
-		{"style padding too large", `load("gum","style")` + "\n" + `style("x", padding=99999)`, "out of range"},
-		{"style padding oversized int", `load("gum","style")` + "\n" + `style("x", padding=1<<100)`, "out of range"},
-		{"style padding oversized negative", `load("gum","style")` + "\n" + `style("x", padding=-99999)`, "out of range"},
+		{"style padding too large", `load("gum","style")` + "\n" + `style("x", padding=99999)`, "exceeds the maximum"},
+		{"style padding oversized int", `load("gum","style")` + "\n" + `style("x", padding=1<<100)`, "exceeds the maximum"},
 		{"style padding unbounded iterable", `load("gum","style")` + "\n" + `style("x", padding=range(1000000))`, "at most"},
 		{"style width x lines amplification", `load("gum","style")` + "\n" + `style("x\n" * 100000, width=10000)`, "cells"},
+		{"style padding-shrunk wrap amplification", `load("gum","style")` + "\n" + `style("x" * 1001, width=10000, padding=(0, 0, 0, 9999))`, "cells"},
+		{"style width0 equalize amplification", `load("gum","style")` + "\n" + `style("x" * 10000 + "\n" * 10000)`, "cells"},
 		{"tree too deep", "load(\"gum\",\"tree\")\ndef deep(n):\n    d = {\"leaf\": 1}\n    for i in range(n):\n        d = {\"k\": d}\n    return d\ntree(deep(2000))", "tree nesting exceeds"},
 		{"table non-list headers", `load("gum","table")` + "\n" + `table("nope", [])`, "headers:"},
 		{"table bad row", `load("gum","table")` + "\n" + `table(["h"], ["notarow"])`, "row 0"},
@@ -800,14 +801,23 @@ func TestToIntList(t *testing.T) {
 	if _, err := toIntList(starlark.String("x")); err == nil {
 		t.Error("string should error")
 	}
-	// An out-of-range int must error, not silently wrap to 0 (which would slip
-	// past the maxStyleDimension check).
+	// An out-of-range positive int must error, not silently wrap to 0 (which
+	// would slip past the maxStyleDimension check).
 	huge := starlark.MakeInt(1).Lsh(100)
 	if _, err := toIntList(huge); err == nil {
 		t.Error("oversized int should error, not wrap to 0")
 	}
 	if _, err := toIntList(starlark.NewList([]starlark.Value{starlark.MakeInt(1), huge})); err == nil {
 		t.Error("oversized int in a list should error")
+	}
+	// A negative value clamps to 0 (lipgloss does the same), so a huge negative
+	// can't truncate to a positive on a 32-bit int — and small negatives are not
+	// gratuitously rejected.
+	if got, err := toIntList(starlark.MakeInt(-5)); err != nil || len(got) != 1 || got[0] != 0 {
+		t.Errorf("negative should clamp to 0: %v, %v", got, err)
+	}
+	if got, err := toIntList(starlark.MakeInt(-1).Lsh(100)); err != nil || len(got) != 1 || got[0] != 0 {
+		t.Errorf("huge negative should clamp to 0: %v, %v", got, err)
 	}
 	// More than maxSpacingValues (4) elements is rejected before materialization.
 	tooMany := make([]starlark.Value, maxSpacingValues+1)
@@ -875,6 +885,14 @@ def check():
         fail("missing text: " + r)
     if "╭" not in r:
         fail("missing rounded border: " + r)
+check()`,
+		// A legitimate multi-line render at a real width (and a harmless negative
+		// margin) must NOT be rejected by the area bound.
+		"style large ok": `load("gum", "style")
+def check():
+    r = style("line\n" * 500, width = 80, margin = -3)
+    if "line" not in r:
+        fail("missing text")
 check()`,
 		"table": `load("gum", "table")
 def check():

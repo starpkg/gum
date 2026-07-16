@@ -574,14 +574,16 @@ Parameters:
   or `"right"` (default: `""` — left).
 
 Returns the rendered string. Errors on an unknown color, border, or alignment
-name, a non-int padding/margin, or a `width`/`padding`/`margin` above `10000`.
-These are DoS guards so a huge value can't drive lipgloss into a multi-gigabyte
-allocation, and they close every amplification path: an out-of-range integer
-(e.g. `1<<100`) is rejected rather than silently wrapping to `0`; a
-padding/margin iterable is capped at 4 values so an unbounded one (e.g.
-`range(1e9)`) can't be materialized; and the padded area (line count × `width`)
-is bounded at 10 million cells so many short lines plus a large `width` can't
-amplify a tiny input into an OOM.
+name, a non-int padding/margin, or a positive `width`/`padding`/`margin` above
+`10000` (a negative padding/margin clamps to `0`, as in lipgloss). These are DoS
+guards so a huge value can't drive lipgloss into a multi-gigabyte allocation, and
+they close every amplification path: an out-of-range integer (e.g. `1<<100`) is
+rejected rather than silently wrapping to `0`; a padding/margin iterable is
+capped at 4 values so an unbounded one (e.g. `range(1e9)`) can't be materialized;
+and the whole rendered area (output lines × output width) is bounded at 10
+million cells — accounting for wrap-shrinking padding and the `width=0` case
+where lipgloss equalizes every line to the widest — so no combination of width,
+padding, and line count can amplify a tiny input into an OOM.
 
 ```python
 load("gum", "style")

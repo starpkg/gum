@@ -77,16 +77,19 @@ func parsePosition(name string) (lipgloss.Position, error) {
 // materialized before its values are validated.
 const maxSpacingValues = 4
 
-// spacingInt converts a Starlark int to a Go int, rejecting anything outside
-// [-maxStyleDimension, maxStyleDimension]. The range check is done at int64
-// precision *before* narrowing to int, so a huge value can neither wrap to 0
-// (masking the maxStyleDimension guard) nor truncate on a 32-bit platform where
-// int is 32-bit. Spacing is bounded at maxStyleDimension anyway, so this is the
-// same limit applyStyleBox enforces, just applied soundly.
+// spacingInt converts a Starlark int to a Go padding/margin value. A negative
+// value clamps to 0 (lipgloss does the same, so rejecting it would be gratuitous
+// — and clamping also stops a huge negative from truncating to a positive on a
+// 32-bit int). A positive value must fit int64 and stay within maxStyleDimension;
+// the range check runs at int64 precision *before* narrowing to int, so an
+// oversized value can neither wrap to 0 nor truncate on a 32-bit platform.
 func spacingInt(i starlark.Int) (int, error) {
+	if i.Sign() < 0 {
+		return 0, nil
+	}
 	n, ok := i.Int64()
-	if !ok || n > maxStyleDimension || n < -maxStyleDimension {
-		return 0, fmt.Errorf("value %s is out of range (max %d)", i.String(), maxStyleDimension)
+	if !ok || n > maxStyleDimension {
+		return 0, fmt.Errorf("value %s exceeds the maximum of %d", i.String(), maxStyleDimension)
 	}
 	return int(n), nil
 }
@@ -342,15 +345,61 @@ func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args st
 		if a.width > maxStyleDimension {
 			return none, fmt.Errorf("%s: width %d exceeds the maximum of %d", b.Name(), a.width, maxStyleDimension)
 		}
-		// Padding each line up to width amplifies a small input into width×lines
-		// cells; bound that product so many short lines + a large width can't OOM.
-		lines := strings.Count(text, "\n") + 1
-		if int64(lines)*int64(a.width) > maxStyleCells {
-			return none, fmt.Errorf("%s: rendered area (%d lines × width %d) exceeds the maximum of %d cells", b.Name(), lines, a.width, maxStyleCells)
-		}
 		st = st.Width(a.width)
 	}
+	// Bound the whole rendered area, not just width×input-lines: horizontal
+	// padding shrinks lipgloss's wrap width (so one long line becomes many padded
+	// lines), and even with width==0 lipgloss equalizes every line to the widest
+	// one. styleAreaBound accounts for both, so no padding/width/line-count combo
+	// can amplify a small input into a huge allocation.
+	if cells := styleAreaBound(text, st); cells > maxStyleCells {
+		return none, fmt.Errorf("%s: rendered area (~%d cells) exceeds the maximum of %d", b.Name(), cells, maxStyleCells)
+	}
 	return starlark.String(st.Render(text)), nil
+}
+
+// styleAreaBound returns a conservative upper bound on the number of cells
+// lipgloss will produce for text under style st. Output lines ≤ input lines +
+// wrap-induced extra lines + vertical frame; output width ≤ the fixed width (or
+// the widest line when width is unset) + horizontal frame. When a fixed width is
+// set, lipgloss wraps content at width−horizontalPadding, so a large left/right
+// padding can multiply the line count — that is captured via wrapWidth.
+func styleAreaBound(text string, st lipgloss.Style) int64 {
+	inputLines := int64(strings.Count(text, "\n")) + 1
+	frameH := int64(st.GetHorizontalFrameSize())
+	frameV := int64(st.GetVerticalFrameSize())
+	width := int64(st.GetWidth())
+
+	var outLines, outWidth int64
+	if width > 0 {
+		wrapWidth := width - int64(st.GetHorizontalPadding())
+		if wrapWidth < 1 {
+			wrapWidth = 1
+		}
+		// Each content byte can contribute at most one extra wrapped line
+		// (wrapWidth ≥ 1); len(text) is a safe upper bound on the total.
+		outLines = inputLines + int64(len(text))/wrapWidth + frameV
+		outWidth = width + frameH
+	} else {
+		outLines = inputLines + frameV
+		outWidth = int64(longestLineWidth(text)) + frameH
+	}
+	return outLines * outWidth
+}
+
+// longestLineWidth returns the maximum display width among the newline-separated
+// segments of text.
+func longestLineWidth(text string) int {
+	longest, start := 0, 0
+	for i := 0; i <= len(text); i++ {
+		if i == len(text) || text[i] == '\n' {
+			if w := lipgloss.Width(text[start:i]); w > longest {
+				longest = w
+			}
+			start = i + 1
+		}
+	}
+	return longest
 }
 
 // maxStyleDimension bounds a script-supplied width / padding / margin so a huge
@@ -358,9 +407,10 @@ func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args st
 // (OOM). It is far above any real terminal width.
 const maxStyleDimension = 10000
 
-// maxStyleCells bounds the padded render area (line count × width) so a small
-// input can't be amplified — by combining many lines with a large width — into a
-// multi-gigabyte allocation. 10 million cells is far beyond any real render.
+// maxStyleCells bounds the rendered area (output lines × output width, see
+// styleAreaBound) so a small input can't be amplified — by a large width, wrap
+// -shrinking padding, or many lines — into a multi-gigabyte allocation. 10
+// million cells is far beyond any real terminal render.
 const maxStyleCells = 10_000_000
 
 // styleArgs holds the parsed arguments for the style builtin.
