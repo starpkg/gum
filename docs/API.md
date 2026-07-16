@@ -568,12 +568,13 @@ Parameters:
 - `border_fg`: Border foreground color (default: `""`).
 - `padding` / `margin`: Inside / outside spacing, as an int (all sides) or a
   list/tuple of ints in CSS order (1, 2, or 4 values; default: `None`).
-- `width`: Fixed render width (default: `0` — natural width).
+- `width`: Fixed render width (default: `0` — natural width). Bounded at `10000`.
 - `align`: Horizontal alignment of wrapped/padded text — `"left"`, `"center"`,
   or `"right"` (default: `""` — left).
 
 Returns the rendered string. Errors on an unknown color, border, or alignment
-name, or a non-int padding/margin.
+name, a non-int padding/margin, or a `width`/`padding`/`margin` above `10000` (a
+guard so a huge value can't drive lipgloss into a multi-gigabyte allocation).
 
 ```python
 load("gum", "style")
@@ -631,7 +632,8 @@ Renders a nested tree. `data` is a dict, list, or scalar:
 `root`, if given, labels the top of the tree (otherwise the top-level entries
 are listed directly).
 
-Returns the rendered tree string.
+Returns the rendered tree string. Nesting is bounded at `1000` levels (a guard so
+a deeply nested structure can't overflow the stack); deeper input errors.
 
 ```python
 load("gum", "tree")

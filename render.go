@@ -230,6 +230,11 @@ func applySpacing(st lipgloss.Style, v starlark.Value, set func(lipgloss.Style, 
 	if err != nil {
 		return st, err
 	}
+	for _, n := range p {
+		if n > maxStyleDimension {
+			return st, fmt.Errorf("value %d exceeds the maximum of %d", n, maxStyleDimension)
+		}
+	}
 	if len(p) > 0 {
 		st = set(st, p...)
 	}
@@ -279,10 +284,18 @@ func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args st
 		return none, err
 	}
 	if a.width > 0 {
+		if a.width > maxStyleDimension {
+			return none, fmt.Errorf("%s: width %d exceeds the maximum of %d", b.Name(), a.width, maxStyleDimension)
+		}
 		st = st.Width(a.width)
 	}
 	return starlark.String(st.Render(a.text.GoString())), nil
 }
+
+// maxStyleDimension bounds a script-supplied width / padding / margin so a huge
+// value can't drive lipgloss into a multi-gigabyte padded-string allocation
+// (OOM). It is far above any real terminal width.
+const maxStyleDimension = 10000
 
 // styleArgs holds the parsed arguments for the style builtin.
 type styleArgs struct {
@@ -391,9 +404,17 @@ func (m *Module) starTree(thread *starlark.Thread, b *starlark.Builtin, args sta
 	if !root.IsNullOrEmpty() {
 		t = t.Root(root.GoString())
 	}
-	appendTreeChildren(t, data)
+	if err := appendTreeChildren(t, data, 1); err != nil {
+		return none, fmt.Errorf("%s: %w", b.Name(), err)
+	}
 	return starlark.String(t.String()), nil
 }
+
+// maxTreeDepth bounds tree() nesting. Recursing over a script-supplied structure
+// with no limit would overflow the goroutine stack on deeply nested input — an
+// uncatchable fatal error. 1000 is far beyond any readable display tree, far
+// below the stack limit.
+const maxTreeDepth = 1000
 
 // starCompose is a Starlark function to join already-rendered blocks into a
 // layout, horizontally or vertically, with lipgloss.
@@ -441,41 +462,63 @@ func isTreeComposite(v starlark.Value) bool {
 
 // appendTreeChildren adds v's contents to parent as tree children: dict entries
 // nest by key, list/tuple elements append in order, and scalars become leaves.
-func appendTreeChildren(parent *tree.Tree, v starlark.Value) {
+func appendTreeChildren(parent *tree.Tree, v starlark.Value, depth int) error {
+	if depth > maxTreeDepth {
+		return fmt.Errorf("tree nesting exceeds %d levels", maxTreeDepth)
+	}
 	switch t := v.(type) {
 	case *starlark.Dict:
-		for _, k := range t.Keys() {
-			val, _, _ := t.Get(k)
-			ks := dataconv.StarString(k)
-			if isTreeComposite(val) {
-				sub := tree.Root(ks)
-				appendTreeChildren(sub, val)
-				parent.Child(sub)
-			} else {
-				parent.Child(ks + " " + dataconv.StarString(val))
-			}
-		}
+		return appendDictBranches(parent, t, depth)
 	case *starlark.List:
-		for i := 0; i < t.Len(); i++ {
-			appendTreeChild(parent, t.Index(i))
-		}
+		return appendTreeSeq(parent, t, depth)
 	case starlark.Tuple:
-		for _, e := range t {
-			appendTreeChild(parent, e)
-		}
+		return appendTreeSeq(parent, t, depth)
 	default:
 		parent.Child(dataconv.StarString(v))
+		return nil
 	}
+}
+
+// appendDictBranches renders each dict entry as a branch: a scalar value joins
+// onto the key, a composite value nests under it.
+func appendDictBranches(parent *tree.Tree, d *starlark.Dict, depth int) error {
+	for _, k := range d.Keys() {
+		val, _, _ := d.Get(k)
+		ks := dataconv.StarString(k)
+		if isTreeComposite(val) {
+			sub := tree.Root(ks)
+			if err := appendTreeChildren(sub, val, depth+1); err != nil {
+				return err
+			}
+			parent.Child(sub)
+		} else {
+			parent.Child(ks + " " + dataconv.StarString(val))
+		}
+	}
+	return nil
+}
+
+// appendTreeSeq renders each element of an indexable (list/tuple) as a node.
+func appendTreeSeq(parent *tree.Tree, seq starlark.Indexable, depth int) error {
+	for i := 0; i < seq.Len(); i++ {
+		if err := appendTreeChild(parent, seq.Index(i), depth); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // appendTreeChild adds a single list element: a composite nests as an unlabeled
 // subtree, a scalar becomes a leaf.
-func appendTreeChild(parent *tree.Tree, e starlark.Value) {
+func appendTreeChild(parent *tree.Tree, e starlark.Value, depth int) error {
 	if isTreeComposite(e) {
 		sub := tree.New()
-		appendTreeChildren(sub, e)
+		if err := appendTreeChildren(sub, e, depth+1); err != nil {
+			return err
+		}
 		parent.Child(sub)
 	} else {
 		parent.Child(dataconv.StarString(e))
 	}
+	return nil
 }
