@@ -460,6 +460,93 @@ func countControlBytes(s string) int {
 	return n
 }
 
+// blockDims returns the rendered display width (widest line) and height (line
+// count) of an already-rendered block. Control bytes (tab included) are bounded
+// at ctrlDisplayCells each, since they display wider than ansi.StringWidth reports.
+func blockDims(s string) (width, height int64) {
+	height = 1
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == '\n' {
+			seg := s[start:i]
+			w := int64(lipgloss.Width(seg)) + ctrlDisplayCells*int64(countControlBytes(seg))
+			if w > width {
+				width = w
+			}
+			if i < len(s) {
+				height++
+			}
+			start = i + 1
+		}
+	}
+	return width, height
+}
+
+// composeAreaBound upper-bounds the cells lipgloss.Join{Vertical,Horizontal}
+// produces for the pre-rendered blocks. A vertical join stacks the blocks and
+// pads each to the widest, so cells ≤ Σheights × maxWidth; a horizontal join
+// places them side by side padded to the tallest, so cells ≤ maxHeight × Σwidths.
+func composeAreaBound(blocks []string, horizontal bool) int64 {
+	var sumW, sumH, maxW, maxH int64
+	for _, blk := range blocks {
+		w, h := blockDims(blk)
+		sumW += w
+		sumH += h
+		if w > maxW {
+			maxW = w
+		}
+		if h > maxH {
+			maxH = h
+		}
+	}
+	if horizontal {
+		return maxH * sumW
+	}
+	return sumH * maxW
+}
+
+// tableAreaBound upper-bounds the cells lipgloss renders for a content-sized
+// table: output rows ≈ Σ(each row's tallest cell) + header + border/separator
+// rows; output width ≈ Σ(each column's widest cell) + border/padding columns.
+func tableAreaBound(headers []string, rows [][]string) int64 {
+	cols := len(headers)
+	for _, r := range rows {
+		if len(r) > cols {
+			cols = len(r)
+		}
+	}
+	colWidth := make([]int64, cols)
+	totalRows := accumulateCells(headers, colWidth) // header height
+	for _, r := range rows {
+		totalRows += accumulateCells(r, colWidth) // each row's tallest cell
+	}
+	var tableWidth int64
+	for _, w := range colWidth {
+		tableWidth += w
+	}
+	// Generous allowance for lipgloss's per-column padding/separators and the
+	// header separator + top/bottom borders.
+	tableWidth += int64(cols)*4 + 4
+	totalRows += int64(len(rows)) + 4
+	return totalRows * tableWidth
+}
+
+// accumulateCells folds one row's cells into the per-column max widths and
+// returns the row's height (its tallest cell's line count, at least 1).
+func accumulateCells(cells []string, colWidth []int64) int64 {
+	var rowH int64 = 1
+	for c, cell := range cells {
+		w, h := blockDims(cell)
+		if w > colWidth[c] {
+			colWidth[c] = w
+		}
+		if h > rowH {
+			rowH = h
+		}
+	}
+	return rowH
+}
+
 // maxStyleDimension bounds a script-supplied width / padding / margin so a huge
 // value can't drive lipgloss into a multi-gigabyte padded-string allocation
 // (OOM). It is far above any real terminal width.
@@ -537,23 +624,36 @@ func (m *Module) starTable(thread *starlark.Thread, b *starlark.Builtin, args st
 	if err != nil {
 		return none, fmt.Errorf("rows: %w", err)
 	}
+	// Columns size to their content, so many rows or a very wide cell would
+	// amplify a small input into a huge table; bound the rendered area.
+	if cells := tableAreaBound(headers, rows); cells > maxStyleCells {
+		return none, fmt.Errorf("%s: rendered area (~%d cells) exceeds the maximum of %d", b.Name(), cells, maxStyleCells)
+	}
 
 	t := table.New().Headers(headers...).Rows(rows...)
+	if t, err = applyTableBorder(t, border, borderFg); err != nil {
+		return none, err
+	}
+	return starlark.String(t.String()), nil
+}
+
+// applyTableBorder resolves the optional border style and foreground color onto t.
+func applyTableBorder(t *table.Table, border, borderFg *types.NullableStringOrBytes) (*table.Table, error) {
 	if !border.IsNullOrEmpty() {
 		bd, err := parseBorder(border.GoString())
 		if err != nil {
-			return none, err
+			return t, err
 		}
 		t = t.Border(bd)
 	}
 	if !borderFg.IsNullOrEmpty() {
 		c, err := ParseColor(borderFg.GoString())
 		if err != nil {
-			return none, fmt.Errorf("border_fg: %w", err)
+			return t, fmt.Errorf("border_fg: %w", err)
 		}
 		t = t.BorderStyle(lipgloss.NewStyle().Foreground(c))
 	}
-	return starlark.String(t.String()), nil
+	return t, nil
 }
 
 // starTree is a Starlark function to render a nested tree with lipgloss.
@@ -614,14 +714,23 @@ func (m *Module) starCompose(thread *starlark.Thread, b *starlark.Builtin, args 
 	if err != nil {
 		return none, err
 	}
+	horizontal := false
 	switch strings.ToLower(strings.TrimSpace(dir)) {
 	case "v", "vertical", "":
-		return starlark.String(lipgloss.JoinVertical(pos, parts...)), nil
 	case "h", "horizontal":
-		return starlark.String(lipgloss.JoinHorizontal(pos, parts...)), nil
+		horizontal = true
 	default:
 		return none, fmt.Errorf(`unsupported dir: %s (want "h" or "v")`, dir)
 	}
+	// Joining pads every block to the widest (vertical) or tallest (horizontal)
+	// one, so a single large block plus many others amplifies; bound the area.
+	if cells := composeAreaBound(parts, horizontal); cells > maxStyleCells {
+		return none, fmt.Errorf("%s: composed area (~%d cells) exceeds the maximum of %d", b.Name(), cells, maxStyleCells)
+	}
+	if horizontal {
+		return starlark.String(lipgloss.JoinHorizontal(pos, parts...)), nil
+	}
+	return starlark.String(lipgloss.JoinVertical(pos, parts...)), nil
 }
 
 // isTreeComposite reports whether v should nest as a subtree rather than render

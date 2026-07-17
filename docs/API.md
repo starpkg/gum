@@ -609,7 +609,10 @@ Parameters:
 - `border_fg`: Border foreground color (default: `""`).
 
 Returns the rendered table string. Errors on a non-list `headers`/`rows`, a row
-that is not a list, or an unknown border/color.
+that is not a list, or an unknown border/color. Columns size to their content, so
+the total rendered area (rows × column widths) is bounded at 10 million cells — a
+DoS guard so many rows or a very wide cell can't amplify a small input into a
+multi-gigabyte table; a larger table errors.
 
 ```python
 load("gum", "table")
@@ -670,7 +673,10 @@ Parameters:
   `"left"`).
 
 Returns the composed string. Errors on an unknown `dir` or `align`, or a
-non-list `blocks`.
+non-list `blocks`. Joining pads every block to the widest (vertical) or tallest
+(horizontal) one, so the composed area is bounded at 10 million cells — a DoS
+guard so one large block among many can't amplify into a huge allocation; a
+larger composition errors.
 
 ```python
 load("gum", "style", "compose")
