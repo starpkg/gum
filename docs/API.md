@@ -107,9 +107,12 @@ Parameters:
 The external editor opened with **Ctrl+E** runs the host-configured `editor`
 command (via `os/exec`). A script **cannot** choose it — there is no per-call
 `editor` argument and no `set_editor` — so an untrusted script can't make the host
-run an arbitrary command. The editor is set host-side only (see
-[Configuration](#configuration)); when it is empty, `huh` uses its own default
-(`$EDITOR`, else `nano`).
+run an arbitrary command. The editor is resolved once from host-controlled
+sources: the `editor` config (see [Configuration](#configuration)), else the
+host's `$EDITOR` **captured at module construction**, else `nano`. The live
+`$EDITOR` is never used, so a script cannot inject the editor command *or its
+arguments* (which for some editors would be code execution) by mutating `$EDITOR`
+at runtime.
 
 Returns the entered text as a string, or `None` if cancelled or timed out.
 
@@ -740,7 +743,7 @@ its environment value at construction — the editor is set host-side only, via
 | `width` | `get_width` | `set_width` | `GUM_WIDTH` | `50` | Default width for TUI components (`0` = terminal width). |
 | `height` | `get_height` | `set_height` | `GUM_HEIGHT` | `0` | Default height for components (`0` = automatic). |
 | `theme` | `get_theme` | `set_theme` | `GUM_THEME` | `charm` | Theme name. **`set_theme` is overridden by `gum`** to re-apply the theme immediately (see above). |
-| `editor` | `get_editor` | _host-only, no `set_editor`_ | `GUM_EDITOR` | `[]` | External editor command for `write` (e.g. `["vim", "-f"]`); empty falls back to `huh`. **Host-only** — a script cannot set it. |
+| `editor` | `get_editor` | _host-only, no `set_editor`_ | `GUM_EDITOR` | `[]` | External editor command for `write` (e.g. `["vim", "-f"]`); empty falls back to the host's `$EDITOR` snapshot (taken at construction), else `nano`. **Host-only** — a script cannot set it, and the live `$EDITOR` is never used. |
 
 Available themes: `base` (minimal, monochrome), `base16` (simple 16-color),
 `charm` (default), `dracula`, `catppuccin`.

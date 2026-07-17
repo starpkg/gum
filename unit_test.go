@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -1330,6 +1331,55 @@ func TestEditorIsHostOnly(t *testing.T) {
 	err := runGumScript(t, "load(\"gum\",\"write\")\nwrite(editor=[\"vim\"])")
 	if err == nil || !strings.Contains(err.Error(), "editor") {
 		t.Errorf("write should reject an editor= argument, got %v", err)
+	}
+}
+
+// TestEditorResolutionIsHostControlled verifies write's editor is resolved only
+// from host-controlled sources, and — crucially — that a $EDITOR mutation AFTER
+// construction (what a script's runtime.setenv would do) cannot change it. huh
+// reads the live $EDITOR itself, so resolveEditor must always return a non-empty
+// host-chosen command to override that fallback.
+func TestEditorResolutionIsHostControlled(t *testing.T) {
+	// The host `editor` config takes precedence.
+	if got := NewModuleWithConfig(50, 5, "charm", []string{"vim", "-f"}).resolveEditor(); len(got) != 2 || got[0] != "vim" {
+		t.Errorf("config editor = %v, want [vim -f]", got)
+	}
+	// No config editor: the $EDITOR snapshot at construction is used, and a later
+	// mutation of the live env does NOT change it.
+	t.Setenv("EDITOR", "hosteditor --flag")
+	m := NewModule()
+	os.Setenv("EDITOR", "attacker") // simulate a script's runtime.setenv after construction
+	if got := m.resolveEditor(); len(got) == 0 || got[0] != "hosteditor" {
+		t.Errorf("editor should be the construction-time snapshot, got %v", got)
+	}
+	// Neither config nor $EDITOR: a fixed default, never the live $EDITOR.
+	t.Setenv("EDITOR", "")
+	m2 := NewModule()
+	os.Setenv("EDITOR", "attacker")
+	if got := m2.resolveEditor(); len(got) != 1 || got[0] != defaultWriteEditor {
+		t.Errorf("editor fallback = %v, want [%s]", got, defaultWriteEditor)
+	}
+}
+
+// TestNewHostEditorTextPinIsTransactional verifies newHostEditorText pins $EDITOR
+// only for the duration of huh.NewText (which captures the command AND args from
+// it) and restores the live value afterward — so the pin closes huh's arg-leak
+// without permanently mutating the process environment.
+func TestNewHostEditorTextPinIsTransactional(t *testing.T) {
+	m := NewModuleWithConfig(50, 5, "charm", []string{"vim"})
+	// A pre-existing (script-set) $EDITOR is restored, not left pinned.
+	t.Setenv("EDITOR", "vim -c :!attacker")
+	if txt := m.newHostEditorText(); txt == nil {
+		t.Fatal("newHostEditorText returned nil")
+	}
+	if got := os.Getenv("EDITOR"); got != "vim -c :!attacker" {
+		t.Errorf("EDITOR not restored after pin: %q", got)
+	}
+	// With no prior $EDITOR, it is left unset (not stuck at the pinned value).
+	os.Unsetenv("EDITOR")
+	_ = m.newHostEditorText()
+	if _, had := os.LookupEnv("EDITOR"); had {
+		t.Error("EDITOR should remain unset after the pin")
 	}
 }
 

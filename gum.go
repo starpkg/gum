@@ -15,7 +15,9 @@ package gum
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	huh "charm.land/huh/v2"
@@ -51,7 +53,17 @@ type Module struct {
 	theme   huh.Theme
 	keymap  *huh.KeyMap
 	isReady bool
+	// editorEnv snapshots the host's $EDITOR at construction (before any script
+	// runs). It is the fallback editor when the host set no explicit `editor`
+	// config, so write never reads the live $EDITOR — which a script could mutate
+	// via runtime.setenv to choose the command huh runs on Ctrl+E.
+	editorEnv []string
 }
+
+// defaultWriteEditor is the last-resort external editor when neither the host's
+// `editor` config nor its $EDITOR is set — a fixed command so a script can't
+// steer huh's own live-$EDITOR fallback.
+const defaultWriteEditor = "nano"
 
 // NewModule creates a new instance of Module with default configurations.
 // The default configurations include:
@@ -106,7 +118,50 @@ func newModuleWithOptions(widthOpt *base.ConfigOption[int], heightOpt *base.Conf
 	return &Module{
 		cfgMod: cm,
 		ext:    cm.Extend(),
+		// Snapshot $EDITOR now, at construction, before any script can run
+		// runtime.setenv — this is the host-controlled fallback editor.
+		editorEnv: strings.Fields(os.Getenv("EDITOR")),
 	}
+}
+
+// resolveEditor returns the external editor command write should use, resolved
+// once from host-controlled sources so a script can never choose it: the
+// host-only `editor` config, else the $EDITOR snapshot taken at construction,
+// else a fixed default. It is always non-empty.
+func (m *Module) resolveEditor() []string {
+	if cfg, err := base.GetConfigValue[[]string](m.cfgMod, configKeyEditor); err == nil && len(cfg) > 0 {
+		return cfg
+	}
+	if len(m.editorEnv) > 0 {
+		return m.editorEnv
+	}
+	return []string{defaultWriteEditor}
+}
+
+// editorEnvMu serializes the brief $EDITOR pin in newHostEditorText, since it
+// mutates the process environment that huh.NewText reads.
+var editorEnvMu sync.Mutex
+
+// newHostEditorText builds a huh.Text whose external editor — command AND
+// arguments — is fixed to the host-resolved value. huh.NewText captures $EDITOR
+// (both parts) at construction and its Editor() setter can't clear leaked
+// arguments, so $EDITOR is pinned to the resolved editor just for the duration of
+// NewText. A script's runtime.setenv then can't inject the command or its args
+// into the process huh runs via os/exec on Ctrl+E.
+func (m *Module) newHostEditorText() *huh.Text {
+	editor := m.resolveEditor()
+	editorEnvMu.Lock()
+	defer editorEnvMu.Unlock()
+	prev, had := os.LookupEnv("EDITOR")
+	_ = os.Setenv("EDITOR", strings.Join(editor, " "))
+	defer func() {
+		if had {
+			_ = os.Setenv("EDITOR", prev)
+		} else {
+			_ = os.Unsetenv("EDITOR")
+		}
+	}()
+	return huh.NewText().Editor(editor...)
 }
 
 // LoadModule returns the Starlark module loader with the gum-specific functions.

@@ -8,7 +8,6 @@ import (
 	huh "charm.land/huh/v2"
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/starpkg/base"
 	"go.starlark.net/starlark"
 )
 
@@ -61,23 +60,22 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 	}
 
 	// The editor is host-configured only — a script can neither pass it per call
-	// nor set it, so it can't choose the command huh runs via os/exec.
-	editorCmd, _ := base.GetConfigValue[[]string](m.cfgMod, configKeyEditor)
+	// nor set it. newHostEditorText builds the huh text with the editor command
+	// AND arguments pinned to the host-resolved value, so huh never runs the live
+	// (script-mutable) $EDITOR — command or args — via os/exec on Ctrl+E.
+	value := dataconv.StarString(initialValue)
+	text := m.newHostEditorText().
+		Title(title).
+		Description(description).
+		Placeholder(placeholder).
+		Validate(convertStringValidator(thread, &validateFunc)).
+		CharLimit(charLimit).
+		ShowLineNumbers(showLineNumbers).
+		Value(&value)
 
 	// run form
-	value := dataconv.StarString(initialValue)
 	err := huh.NewForm(
-		huh.NewGroup(
-			huh.NewText().
-				Title(title).
-				Description(description).
-				Placeholder(placeholder).
-				Validate(convertStringValidator(thread, &validateFunc)).
-				CharLimit(charLimit).
-				ShowLineNumbers(showLineNumbers).
-				Editor(editorCmd...).
-				Value(&value),
-		),
+		huh.NewGroup(text),
 	).
 		WithWidth(m.getWidth(width)).
 		WithHeight(m.getHeight(height)).
