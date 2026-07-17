@@ -36,6 +36,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv/types"
+	"github.com/starpkg/base"
 	"go.starlark.net/starlark"
 )
 
@@ -1309,6 +1310,27 @@ func TestNewModuleWithConfig(t *testing.T) {
 	if got := m.ext.GetString(configKeyTheme, "x"); got != "dracula" {
 		t.Errorf("configured theme = %q, want dracula", got)
 	}
+	// The host-set editor is still wired through the (host-only) config option.
+	if got, _ := base.GetConfigValue[[]string](m.cfgMod, configKeyEditor); len(got) != 2 || got[0] != "vim" {
+		t.Errorf("configured editor = %v, want [vim -f]", got)
+	}
+}
+
+// TestEditorIsHostOnly verifies the editor is host-configured only: base generates
+// get_editor but no set_editor, and write() has no per-call editor argument — so a
+// script cannot choose the command huh runs via os/exec.
+func TestEditorIsHostOnly(t *testing.T) {
+	if err := runGumScript(t, `load("gum","set_editor")`); err == nil {
+		t.Error("set_editor is loadable — a script could choose the editor command")
+	}
+	if err := runGumScript(t, `load("gum","get_editor")`); err != nil {
+		t.Errorf("get_editor should be loadable: %v", err)
+	}
+	// The per-call editor argument is gone (UnpackArgs rejects it before any TTY).
+	err := runGumScript(t, "load(\"gum\",\"write\")\nwrite(editor=[\"vim\"])")
+	if err == nil || !strings.Contains(err.Error(), "editor") {
+		t.Errorf("write should reject an editor= argument, got %v", err)
+	}
 }
 
 // TestSetThemeOverride verifies set_theme is the gum override that applies the
@@ -1361,12 +1383,16 @@ func TestLoadModuleRegistersBuiltins(t *testing.T) {
 		"md", "md_note", "spin", "file_pick", "colorize", "set_theme",
 		"style", "table", "tree", "compose", "code_block", "filter",
 		"get_width", "set_width", "get_height", "set_height",
-		"get_theme", "get_editor", "set_editor",
+		"get_theme", "get_editor",
 	}
 	for _, name := range want {
 		v, err := hasAttr.Attr(name)
 		if err != nil || v == nil {
 			t.Errorf("builtin/accessor %q missing from module: %v", name, err)
 		}
+	}
+	// editor is host-only: get_editor exists (above) but set_editor must NOT.
+	if v, err := hasAttr.Attr("set_editor"); err == nil && v != nil {
+		t.Error("set_editor is registered — editor should be host-only")
 	}
 }

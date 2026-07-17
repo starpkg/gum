@@ -8,7 +8,8 @@
 //   - width: default width for components (0 for terminal width)
 //   - height: default height for components
 //   - theme: theme name to use (base, base16, charm, dracula, catppuccin)
-//   - editor: default editor command for multi-line input (e.g. ["vim", "-f"])
+//   - editor: host-only default editor command for multi-line input (e.g.
+//     ["vim", "-f"]); set only host-side, never by a script
 package gum
 
 import (
@@ -63,7 +64,10 @@ func NewModule() *Module {
 		genConfigOption(configKeyWidth, "Default width for components", 50), // (0 for terminal width)
 		genConfigOption(configKeyHeight, "Default height for components", 0),
 		genConfigOption(configKeyTheme, "Theme name to use (base, base16, charm, dracula, catppuccin)", "charm"),
-		genConfigOption(configKeyEditor, "Default editor command (e.g. ['vim', '-f'])", []string{}),
+		// Host-only: the editor command is passed to huh, which runs it via os/exec
+		// when the user opens the external editor. A script must not be able to
+		// choose that command, so base generates no set_editor and snapshots the env.
+		genConfigOption(configKeyEditor, "Default editor command (e.g. ['vim', '-f'])", []string{}).SetHostOnly(true),
 	)
 }
 
@@ -78,7 +82,7 @@ func NewModuleWithConfig(width, height int, themeName string, editor []string) *
 		genConfigOption(configKeyWidth, "Default width for components with preset value", width),
 		genConfigOption(configKeyHeight, "Default height for components with preset value", height),
 		genConfigOption(configKeyTheme, "Theme name to use with preset value", themeName),
-		genConfigOption(configKeyEditor, "Default editor command with preset value", editor),
+		genConfigOption(configKeyEditor, "Default editor command with preset value", editor).SetHostOnly(true),
 	)
 }
 
