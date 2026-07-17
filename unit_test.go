@@ -32,6 +32,7 @@ import (
 	"time"
 
 	huh "charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv/types"
 	"go.starlark.net/starlark"
@@ -833,6 +834,88 @@ func TestToIntList(t *testing.T) {
 	// Exactly maxSpacingValues is allowed.
 	if got, err := toIntList(starlark.NewList(tooMany[:maxSpacingValues])); err != nil || len(got) != maxSpacingValues {
 		t.Errorf("%d spacing values should be allowed: %v, %v", maxSpacingValues, got, err)
+	}
+}
+
+// TestStyleAreaBoundUpperBound empirically verifies the DoS guard's core
+// invariant: styleAreaBound must never UNDER-count the cells lipgloss actually
+// renders. It renders a large cross-product of realistic and adversarial-shaped
+// inputs (short lines, long lines, tabs, C0 controls, wide graphemes) against
+// every width / padding / margin / border combination and asserts the bound is
+// ≥ the actual rendered rectangle (rows × widest row). A failure pinpoints an
+// exact combination where the bound is unsound.
+func TestStyleAreaBoundUpperBound(t *testing.T) {
+	texts := []string{
+		"",
+		"hello",
+		strings.Repeat("x", 300),
+		strings.Repeat("line\n", 40),
+		strings.Repeat("word ", 60), // many short words (word-wrap slack)
+		strings.Repeat("ab ", 100),  // 2-char words near half-width
+		strings.Repeat("supercalifragilistic ", 30), // long words
+		strings.Repeat("a-b-c-", 50),                // hyphen breakpoints
+		strings.Repeat("\t", 30),
+		strings.Repeat("\x01", 30),
+		strings.Repeat("\x1b\x07\x08", 20), // stray control bytes
+		"世界 " + strings.Repeat("界", 40),    // wide graphemes + space
+		strings.Repeat("界", 120),           // wide graphemes, no break
+		"😀🎉 " + strings.Repeat("🚀", 40),    // emoji clusters
+		"mixed 世 x\ttab\x01ctrl end",
+		"a\nbb\nccc\ndddd",
+		strings.Repeat("x", 3000),                                // long unbroken line
+		strings.Repeat("界", 800),                                 // long wide-grapheme run
+		strings.Repeat("x\t", 400),                               // tabs interspersed
+		strings.Repeat("\t", 600),                                // pure tabs (display > wrap advance)
+		strings.Repeat("\x07", 600),                              // pure C0 controls
+		strings.Repeat("word\n", 200) + strings.Repeat("z", 400), // many lines + a long one
+	}
+	widths := []int{0, 1, 2, 3, 5, 11, 20, 80, 200, 500}
+	spacings := [][]int{nil, {2}, {1, 3}, {0, 0, 0, 15}, {7, 0, 7, 0}, {4, 4, 4, 4}}
+	borders := []string{"", "normal", "rounded", "double", "thick"}
+
+	renderedCells := func(s string) int64 {
+		lines := strings.Split(s, "\n")
+		var maxW int64
+		for _, ln := range lines {
+			if w := int64(lipgloss.Width(ln)); w > maxW {
+				maxW = w
+			}
+		}
+		return int64(len(lines)) * maxW
+	}
+
+	for _, text := range texts {
+		for _, width := range widths {
+			for _, pad := range spacings {
+				for _, margin := range spacings {
+					for _, border := range borders {
+						st := lipgloss.NewStyle()
+						if border != "" {
+							bd, err := parseBorder(border)
+							if err != nil {
+								t.Fatalf("parseBorder(%q): %v", border, err)
+							}
+							st = st.Border(bd)
+						}
+						if pad != nil {
+							st = st.Padding(pad...)
+						}
+						if margin != nil {
+							st = st.Margin(margin...)
+						}
+						if width > 0 {
+							st = st.Width(width)
+						}
+						bound := styleAreaBound(text, st)
+						actual := renderedCells(st.Render(text))
+						if actual > bound {
+							t.Errorf("under-count: bound=%d actual=%d text=%q width=%d pad=%v margin=%v border=%q",
+								bound, actual, text, width, pad, margin, border)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 

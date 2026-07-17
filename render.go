@@ -370,58 +370,81 @@ const ctrlDisplayCells = 8
 // border/line-count combination can amplify a small input into a huge render.
 //
 // Output cells = output lines × output width. lipgloss wraps content at the
-// effective width (fixed width − horizontal padding − border columns); when that
-// is ≥1 the content is wrapped to the fixed width, and when it is ≤0 (or no width
-// is set) wrapping is skipped and every line keeps its full width, which
-// alignment then equalizes. Both regimes are bounded here.
+// effective width (fixed width − horizontal padding − border columns). Empirically
+// (verified by TestStyleAreaBoundUpperBound): with effWidth ≥ 2 content wraps to
+// ~width and only an atomic unit wider than effWidth overflows (bounded by
+// ctrlDisplayCells); with effWidth ≤ 1 a break unit may not fit, so lipgloss
+// renders unwrapped at the natural line width with up to one unit per row; with
+// no width set nothing wraps. styleWrapMetrics bounds the wrap rows per line for
+// whichever regime applies.
 func styleAreaBound(text string, st lipgloss.Style) int64 {
-	inputLines, maxDisplay, totalWrap := styleContentMetrics(text)
 	frameH := int64(st.GetHorizontalFrameSize())
 	frameV := int64(st.GetVerticalFrameSize())
 	hPad := int64(st.GetHorizontalPadding())
 	borderH := frameH - hPad - int64(st.GetHorizontalMargins())
 	width := int64(st.GetWidth())
+	effWidth := width - hPad - borderH
 
-	var outWidth, wrapExtra int64
-	switch effWidth := width - hPad - borderH; {
-	case width > 0 && effWidth >= 1:
-		// Content wraps to the fixed width; wrapped rows ≤ totalWrap/effWidth.
-		outWidth = width + frameH
-		wrapExtra = totalWrap / effWidth
-	default:
-		// width==0, or the frame leaves no room to wrap: lines keep full width.
-		outWidth = max(width, maxDisplay) + frameH
+	inputLines, maxDisplay, wrapExtra, controls := styleWrapMetrics(text, width, effWidth)
+
+	// width==0 or effWidth ≤ 1: no wrapping (or it is abandoned), so a line renders
+	// at its full natural width — bound the row width by the widest line.
+	outWidth := max(width, maxDisplay) + frameH
+	if width > 0 && effWidth >= 2 {
+		// Content wraps to ~width. A wrapped row's display can still exceed width
+		// when control bytes (tabs) expand *after* wrapping, so bound such a row by
+		// effWidth worth of max-display units, capped by the whole line's display.
+		rowWidth := width
+		if controls > 0 {
+			rowWidth = min(maxDisplay, effWidth*ctrlDisplayCells)
+		}
+		outWidth = max(width, rowWidth) + frameH
 	}
 	return (inputLines + wrapExtra + frameV) * outWidth
 }
 
-// styleContentMetrics returns, in one pass, the number of newline-separated
-// lines, the widest line's rendered display width, and the total wrap-unit count
-// across all lines. It over-counts each control byte (< 0x20 or DEL, which
-// includes tab) because lipgloss's wrapper advances one wrap unit per such byte
-// (its ExecuteAction case) while ansi.StringWidth reports them as zero — display
-// width is bounded at ctrlDisplayCells per control byte, wrap units at one.
-// (Escape-sequence bytes are also counted, which only over-estimates.)
-func styleContentMetrics(text string) (lines, maxDisplay, totalWrap int64) {
+// styleWrapMetrics scans text once and returns the line count, the widest line's
+// rendered display width, an upper bound on the extra rows wrapping adds, and the
+// total control-byte count. Control bytes (< 0x20 or DEL, tab included) are
+// over-counted: lipgloss advances one wrap unit per such byte (its ExecuteAction
+// case) though ansi.StringWidth reports them as zero — display width is bounded at
+// ctrlDisplayCells each, wrap units at one. (Escape-sequence bytes count too,
+// which only over-estimates.)
+func styleWrapMetrics(text string, width, effWidth int64) (lines, maxDisplay, wrapExtra, controls int64) {
 	lines = 1
 	start := 0
 	for i := 0; i <= len(text); i++ {
 		if i == len(text) || text[i] == '\n' {
 			seg := text[start:i]
-			printW := int64(lipgloss.Width(seg))
 			ctrl := int64(countControlBytes(seg))
-			display := printW + ctrlDisplayCells*ctrl
-			if display > maxDisplay {
+			controls += ctrl
+			wrapUnits := int64(lipgloss.Width(seg)) + ctrl
+			if display := wrapUnits + (ctrlDisplayCells-1)*ctrl; display > maxDisplay {
 				maxDisplay = display
 			}
-			totalWrap += printW + ctrl
+			wrapExtra += lineWrapExtra(wrapUnits, width, effWidth)
 			if i < len(text) {
 				lines++
 			}
 			start = i + 1
 		}
 	}
-	return lines, maxDisplay, totalWrap
+	return lines, maxDisplay, wrapExtra, controls
+}
+
+// lineWrapExtra upper-bounds the rows a single line adds beyond its first when
+// wrapped at effWidth. A line that fits (or an unset width) adds none; at effWidth
+// ≤ 1 a line may render one unit per row; otherwise word-wrap wastes up to half a
+// row per break, so 2×wrapUnits/effWidth + 1 bounds it.
+func lineWrapExtra(wrapUnits, width, effWidth int64) int64 {
+	switch {
+	case width == 0 || wrapUnits <= effWidth:
+		return 0
+	case effWidth <= 1:
+		return wrapUnits
+	default:
+		return 2*wrapUnits/effWidth + 1
+	}
 }
 
 // countControlBytes counts the C0 control bytes (below space, or DEL) in s —
