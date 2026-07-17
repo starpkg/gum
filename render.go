@@ -358,10 +358,12 @@ func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args st
 	return starlark.String(st.Render(text)), nil
 }
 
-// tabCells upper-bounds the display width lipgloss gives a tab. Its default tab
-// width is 4; 8 is a safe over-estimate (ansi.StringWidth counts a tab as 0, so
-// tab-heavy lines must be measured separately or they under-count).
-const tabCells = 8
+// ctrlDisplayCells upper-bounds the display width a single control byte can
+// contribute after lipgloss renders it: a tab expands to its default 4 spaces
+// and other C0 controls render as 0, so 8 is a safe over-estimate. Such bytes
+// are invisible to ansi.StringWidth (it reports them as 0), so tab/control-heavy
+// lines must be measured separately or they under-count.
+const ctrlDisplayCells = 8
 
 // styleAreaBound returns a conservative upper bound on the number of cells
 // lipgloss will produce for text under style st, so no width/padding/margin/
@@ -373,7 +375,7 @@ const tabCells = 8
 // is set) wrapping is skipped and every line keeps its full width, which
 // alignment then equalizes. Both regimes are bounded here.
 func styleAreaBound(text string, st lipgloss.Style) int64 {
-	inputLines, longest, totalCells := styleContentMetrics(text)
+	inputLines, maxDisplay, totalWrap := styleContentMetrics(text)
 	frameH := int64(st.GetHorizontalFrameSize())
 	frameV := int64(st.GetVerticalFrameSize())
 	hPad := int64(st.GetHorizontalPadding())
@@ -383,38 +385,56 @@ func styleAreaBound(text string, st lipgloss.Style) int64 {
 	var outWidth, wrapExtra int64
 	switch effWidth := width - hPad - borderH; {
 	case width > 0 && effWidth >= 1:
-		// Content wraps to the fixed width; wrapped rows ≤ totalCells/effWidth.
+		// Content wraps to the fixed width; wrapped rows ≤ totalWrap/effWidth.
 		outWidth = width + frameH
-		wrapExtra = totalCells / effWidth
+		wrapExtra = totalWrap / effWidth
 	default:
 		// width==0, or the frame leaves no room to wrap: lines keep full width.
-		outWidth = max(width, longest) + frameH
+		outWidth = max(width, maxDisplay) + frameH
 	}
 	return (inputLines + wrapExtra + frameV) * outWidth
 }
 
 // styleContentMetrics returns, in one pass, the number of newline-separated
-// lines, the widest line's display width, and the total display width across all
-// lines. Tab cells are counted at tabCells because lipgloss expands tabs on
-// render while ansi.StringWidth reports them as zero.
-func styleContentMetrics(text string) (lines, longest, totalCells int64) {
+// lines, the widest line's rendered display width, and the total wrap-unit count
+// across all lines. It over-counts each control byte (< 0x20 or DEL, which
+// includes tab) because lipgloss's wrapper advances one wrap unit per such byte
+// (its ExecuteAction case) while ansi.StringWidth reports them as zero — display
+// width is bounded at ctrlDisplayCells per control byte, wrap units at one.
+// (Escape-sequence bytes are also counted, which only over-estimates.)
+func styleContentMetrics(text string) (lines, maxDisplay, totalWrap int64) {
 	lines = 1
 	start := 0
 	for i := 0; i <= len(text); i++ {
 		if i == len(text) || text[i] == '\n' {
 			seg := text[start:i]
-			w := int64(lipgloss.Width(seg)) + tabCells*int64(strings.Count(seg, "\t"))
-			totalCells += w
-			if w > longest {
-				longest = w
+			printW := int64(lipgloss.Width(seg))
+			ctrl := int64(countControlBytes(seg))
+			display := printW + ctrlDisplayCells*ctrl
+			if display > maxDisplay {
+				maxDisplay = display
 			}
+			totalWrap += printW + ctrl
 			if i < len(text) {
 				lines++
 			}
 			start = i + 1
 		}
 	}
-	return lines, longest, totalCells
+	return lines, maxDisplay, totalWrap
+}
+
+// countControlBytes counts the C0 control bytes (below space, or DEL) in s —
+// tab included. Each advances lipgloss's wrap position by one while contributing
+// nothing to ansi.StringWidth.
+func countControlBytes(s string) int {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if b := s[i]; b < 0x20 || b == 0x7f {
+			n++
+		}
+	}
+	return n
 }
 
 // maxStyleDimension bounds a script-supplied width / padding / margin so a huge

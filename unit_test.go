@@ -706,6 +706,7 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"style width0 equalize amplification", `load("gum","style")` + "\n" + `style("x" * 10000 + "\n" * 10000)`, "cells"},
 		{"style border-skipped-wrap amplification", `load("gum","style")` + "\n" + `style("x" * 6000, width=1, border="normal", align="center", padding=(5000, 0, 5000, 0), margin=(5000, 0, 5000, 0))`, "cells"},
 		{"style tab-expansion amplification", `load("gum","style")` + "\n" + `style("\t" * 1500, padding=(10000, 0, 10000, 0))`, "cells"},
+		{"style control-char wrap amplification", `load("gum","style")` + "\n" + `style("\x01" * 3000, width=10000, padding=(0, 0, 0, 9999))`, "cells"},
 		{"tree too deep", "load(\"gum\",\"tree\")\ndef deep(n):\n    d = {\"leaf\": 1}\n    for i in range(n):\n        d = {\"k\": d}\n    return d\ntree(deep(2000))", "tree nesting exceeds"},
 		{"table non-list headers", `load("gum","table")` + "\n" + `table("nope", [])`, "headers:"},
 		{"table bad row", `load("gum","table")` + "\n" + `table(["h"], ["notarow"])`, "row 0"},
