@@ -567,13 +567,23 @@ Parameters:
   (default: `""` — no border).
 - `border_fg`: Border foreground color (default: `""`).
 - `padding` / `margin`: Inside / outside spacing, as an int (all sides) or a
-  list/tuple of ints in CSS order (1, 2, or 4 values; default: `None`).
-- `width`: Fixed render width (default: `0` — natural width).
+  list/tuple of **at most 4** ints in CSS order (1, 2, or 4 values; default:
+  `None`).
+- `width`: Fixed render width (default: `0` — natural width). Bounded at `10000`.
 - `align`: Horizontal alignment of wrapped/padded text — `"left"`, `"center"`,
   or `"right"` (default: `""` — left).
 
 Returns the rendered string. Errors on an unknown color, border, or alignment
-name, or a non-int padding/margin.
+name, a non-int padding/margin, or a positive `width`/`padding`/`margin` above
+`10000` (a negative padding/margin clamps to `0`, as in lipgloss). These are DoS
+guards so a huge value can't drive lipgloss into a multi-gigabyte allocation, and
+they close every amplification path: an out-of-range integer (e.g. `1<<100`) is
+rejected rather than silently wrapping to `0`; a padding/margin iterable is
+capped at 4 values so an unbounded one (e.g. `range(1e9)`) can't be materialized;
+and the whole rendered area (output lines × output width) is bounded at 10
+million cells — accounting for wrap-shrinking padding and the `width=0` case
+where lipgloss equalizes every line to the widest — so no combination of width,
+padding, and line count can amplify a tiny input into an OOM.
 
 ```python
 load("gum", "style")
@@ -631,7 +641,8 @@ Renders a nested tree. `data` is a dict, list, or scalar:
 `root`, if given, labels the top of the tree (otherwise the top-level entries
 are listed directly).
 
-Returns the rendered tree string.
+Returns the rendered tree string. Nesting is bounded at `1000` levels (a guard so
+a deeply nested structure can't overflow the stack); deeper input errors.
 
 ```python
 load("gum", "tree")

@@ -71,6 +71,29 @@ func parsePosition(name string) (lipgloss.Position, error) {
 	}
 }
 
+// maxSpacingValues bounds a padding/margin value list. CSS-style spacing takes
+// at most 4 components (top/right/bottom/left); a longer list is a mistake, and
+// capping it stops an unbounded iterable (e.g. range(1e9)) from being fully
+// materialized before its values are validated.
+const maxSpacingValues = 4
+
+// spacingInt converts a Starlark int to a Go padding/margin value. A negative
+// value clamps to 0 (lipgloss does the same, so rejecting it would be gratuitous
+// — and clamping also stops a huge negative from truncating to a positive on a
+// 32-bit int). A positive value must fit int64 and stay within maxStyleDimension;
+// the range check runs at int64 precision *before* narrowing to int, so an
+// oversized value can neither wrap to 0 nor truncate on a 32-bit platform.
+func spacingInt(i starlark.Int) (int, error) {
+	if i.Sign() < 0 {
+		return 0, nil
+	}
+	n, ok := i.Int64()
+	if !ok || n > maxStyleDimension {
+		return 0, fmt.Errorf("value %s exceeds the maximum of %d", i.String(), maxStyleDimension)
+	}
+	return int(n), nil
+}
+
 // toIntList converts a Starlark int, or a list/tuple of ints, to a []int. It is
 // used for CSS-style padding/margin (1, 2, or 4 values). A None value yields a
 // nil slice (meaning "unset").
@@ -79,21 +102,33 @@ func toIntList(v starlark.Value) ([]int, error) {
 		return nil, nil
 	}
 	if i, ok := v.(starlark.Int); ok {
-		n, _ := i.Int64()
-		return []int{int(n)}, nil
+		n, err := spacingInt(i)
+		if err != nil {
+			return nil, err
+		}
+		return []int{n}, nil
 	}
-	elems, err := iterValues(v)
+	elems, err := iterValuesCapped(v, maxSpacingValues)
 	if err != nil {
 		return nil, err
 	}
+	return intsFromValues(elems)
+}
+
+// intsFromValues converts a slice of Starlark values to []int, rejecting a
+// non-int or an out-of-range int.
+func intsFromValues(elems []starlark.Value) ([]int, error) {
 	out := make([]int, 0, len(elems))
 	for _, e := range elems {
 		n, ok := e.(starlark.Int)
 		if !ok {
 			return nil, fmt.Errorf("expected int, got %s", e.Type())
 		}
-		i, _ := n.Int64()
-		out = append(out, int(i))
+		m, err := spacingInt(n)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
 	}
 	return out, nil
 }
@@ -144,6 +179,31 @@ func starStringMatrix(v starlark.Value) ([][]string, error) {
 			return nil, fmt.Errorf("row %d: %w", i, err)
 		}
 		out = append(out, row)
+	}
+	return out, nil
+}
+
+// iterValuesCapped returns the elements of a Starlark list/tuple/iterable as a
+// slice, but errors after max elements instead of materializing an unbounded
+// iterable (e.g. range(1e9)) before the caller can validate its values. It
+// terminates early even for a huge concrete list, so nothing is fully copied.
+func iterValuesCapped(v starlark.Value, limit int) ([]starlark.Value, error) {
+	if _, ok := v.(starlark.String); ok {
+		return nil, fmt.Errorf("expected a list/tuple, got string")
+	}
+	it, ok := v.(starlark.Iterable)
+	if !ok {
+		return nil, fmt.Errorf("expected a list/tuple, got %s", v.Type())
+	}
+	out := make([]starlark.Value, 0, limit)
+	iter := it.Iterate()
+	defer iter.Done()
+	var e starlark.Value
+	for iter.Next(&e) {
+		if len(out) >= limit {
+			return nil, fmt.Errorf("expected at most %d values", limit)
+		}
+		out = append(out, e)
 	}
 	return out, nil
 }
@@ -226,6 +286,8 @@ func applyTextAttrs(st lipgloss.Style, bold, italic, underline, faint bool) lipg
 // applySpacing applies a CSS-style spacing value (int, or list/tuple of ints)
 // to st via set, leaving st unchanged when the value is unset.
 func applySpacing(st lipgloss.Style, v starlark.Value, set func(lipgloss.Style, ...int) lipgloss.Style) (lipgloss.Style, error) {
+	// toIntList (via spacingInt) already bounds every value to maxStyleDimension,
+	// so no further range check is needed here.
 	p, err := toIntList(v)
 	if err != nil {
 		return st, err
@@ -278,11 +340,136 @@ func (m *Module) starStyle(thread *starlark.Thread, b *starlark.Builtin, args st
 	if st, err = applyStyleBox(st, a.border, a.align, a.padding, a.margin); err != nil {
 		return none, err
 	}
+	text := a.text.GoString()
 	if a.width > 0 {
+		if a.width > maxStyleDimension {
+			return none, fmt.Errorf("%s: width %d exceeds the maximum of %d", b.Name(), a.width, maxStyleDimension)
+		}
 		st = st.Width(a.width)
 	}
-	return starlark.String(st.Render(a.text.GoString())), nil
+	// Bound the whole rendered area, not just width×input-lines: horizontal
+	// padding shrinks lipgloss's wrap width (so one long line becomes many padded
+	// lines), and even with width==0 lipgloss equalizes every line to the widest
+	// one. styleAreaBound accounts for both, so no padding/width/line-count combo
+	// can amplify a small input into a huge allocation.
+	if cells := styleAreaBound(text, st); cells > maxStyleCells {
+		return none, fmt.Errorf("%s: rendered area (~%d cells) exceeds the maximum of %d", b.Name(), cells, maxStyleCells)
+	}
+	return starlark.String(st.Render(text)), nil
 }
+
+// ctrlDisplayCells upper-bounds the display width a single control byte can
+// contribute after lipgloss renders it: a tab expands to its default 4 spaces
+// and other C0 controls render as 0, so 8 is a safe over-estimate. Such bytes
+// are invisible to ansi.StringWidth (it reports them as 0), so tab/control-heavy
+// lines must be measured separately or they under-count.
+const ctrlDisplayCells = 8
+
+// styleAreaBound returns a conservative upper bound on the number of cells
+// lipgloss will produce for text under style st, so no width/padding/margin/
+// border/line-count combination can amplify a small input into a huge render.
+//
+// Output cells = output lines × output width. lipgloss wraps content at the
+// effective width (fixed width − horizontal padding − border columns). Empirically
+// (verified by TestStyleAreaBoundUpperBound): with effWidth ≥ 2 content wraps to
+// ~width and only an atomic unit wider than effWidth overflows (bounded by
+// ctrlDisplayCells); with effWidth ≤ 1 a break unit may not fit, so lipgloss
+// renders unwrapped at the natural line width with up to one unit per row; with
+// no width set nothing wraps. styleWrapMetrics bounds the wrap rows per line for
+// whichever regime applies.
+func styleAreaBound(text string, st lipgloss.Style) int64 {
+	frameH := int64(st.GetHorizontalFrameSize())
+	frameV := int64(st.GetVerticalFrameSize())
+	hPad := int64(st.GetHorizontalPadding())
+	borderH := frameH - hPad - int64(st.GetHorizontalMargins())
+	width := int64(st.GetWidth())
+	effWidth := width - hPad - borderH
+
+	inputLines, maxDisplay, wrapExtra, controls := styleWrapMetrics(text, width, effWidth)
+
+	// width==0 or effWidth ≤ 1: no wrapping (or it is abandoned), so a line renders
+	// at its full natural width — bound the row width by the widest line.
+	outWidth := max(width, maxDisplay) + frameH
+	if width > 0 && effWidth >= 2 {
+		// Content wraps to ~width. A wrapped row's display can still exceed width
+		// when control bytes (tabs) expand *after* wrapping, so bound such a row by
+		// effWidth worth of max-display units, capped by the whole line's display.
+		rowWidth := width
+		if controls > 0 {
+			rowWidth = min(maxDisplay, effWidth*ctrlDisplayCells)
+		}
+		outWidth = max(width, rowWidth) + frameH
+	}
+	return (inputLines + wrapExtra + frameV) * outWidth
+}
+
+// styleWrapMetrics scans text once and returns the line count, the widest line's
+// rendered display width, an upper bound on the extra rows wrapping adds, and the
+// total control-byte count. Control bytes (< 0x20 or DEL, tab included) are
+// over-counted: lipgloss advances one wrap unit per such byte (its ExecuteAction
+// case) though ansi.StringWidth reports them as zero — display width is bounded at
+// ctrlDisplayCells each, wrap units at one. (Escape-sequence bytes count too,
+// which only over-estimates.)
+func styleWrapMetrics(text string, width, effWidth int64) (lines, maxDisplay, wrapExtra, controls int64) {
+	lines = 1
+	start := 0
+	for i := 0; i <= len(text); i++ {
+		if i == len(text) || text[i] == '\n' {
+			seg := text[start:i]
+			ctrl := int64(countControlBytes(seg))
+			controls += ctrl
+			wrapUnits := int64(lipgloss.Width(seg)) + ctrl
+			if display := wrapUnits + (ctrlDisplayCells-1)*ctrl; display > maxDisplay {
+				maxDisplay = display
+			}
+			wrapExtra += lineWrapExtra(wrapUnits, width, effWidth)
+			if i < len(text) {
+				lines++
+			}
+			start = i + 1
+		}
+	}
+	return lines, maxDisplay, wrapExtra, controls
+}
+
+// lineWrapExtra upper-bounds the rows a single line adds beyond its first when
+// wrapped at effWidth. A line that fits (or an unset width) adds none; at effWidth
+// ≤ 1 a line may render one unit per row; otherwise word-wrap wastes up to half a
+// row per break, so 2×wrapUnits/effWidth + 1 bounds it.
+func lineWrapExtra(wrapUnits, width, effWidth int64) int64 {
+	switch {
+	case width == 0 || wrapUnits <= effWidth:
+		return 0
+	case effWidth <= 1:
+		return wrapUnits
+	default:
+		return 2*wrapUnits/effWidth + 1
+	}
+}
+
+// countControlBytes counts the C0 control bytes (below space, or DEL) in s —
+// tab included. Each advances lipgloss's wrap position by one while contributing
+// nothing to ansi.StringWidth.
+func countControlBytes(s string) int {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if b := s[i]; b < 0x20 || b == 0x7f {
+			n++
+		}
+	}
+	return n
+}
+
+// maxStyleDimension bounds a script-supplied width / padding / margin so a huge
+// value can't drive lipgloss into a multi-gigabyte padded-string allocation
+// (OOM). It is far above any real terminal width.
+const maxStyleDimension = 10000
+
+// maxStyleCells bounds the rendered area (output lines × output width, see
+// styleAreaBound) so a small input can't be amplified — by a large width, wrap
+// -shrinking padding, or many lines — into a multi-gigabyte allocation. 10
+// million cells is far beyond any real terminal render.
+const maxStyleCells = 10_000_000
 
 // styleArgs holds the parsed arguments for the style builtin.
 type styleArgs struct {
@@ -391,9 +578,17 @@ func (m *Module) starTree(thread *starlark.Thread, b *starlark.Builtin, args sta
 	if !root.IsNullOrEmpty() {
 		t = t.Root(root.GoString())
 	}
-	appendTreeChildren(t, data)
+	if err := appendTreeChildren(t, data, 1); err != nil {
+		return none, fmt.Errorf("%s: %w", b.Name(), err)
+	}
 	return starlark.String(t.String()), nil
 }
+
+// maxTreeDepth bounds tree() nesting. Recursing over a script-supplied structure
+// with no limit would overflow the goroutine stack on deeply nested input — an
+// uncatchable fatal error. 1000 is far beyond any readable display tree, far
+// below the stack limit.
+const maxTreeDepth = 1000
 
 // starCompose is a Starlark function to join already-rendered blocks into a
 // layout, horizontally or vertically, with lipgloss.
@@ -441,41 +636,63 @@ func isTreeComposite(v starlark.Value) bool {
 
 // appendTreeChildren adds v's contents to parent as tree children: dict entries
 // nest by key, list/tuple elements append in order, and scalars become leaves.
-func appendTreeChildren(parent *tree.Tree, v starlark.Value) {
+func appendTreeChildren(parent *tree.Tree, v starlark.Value, depth int) error {
+	if depth > maxTreeDepth {
+		return fmt.Errorf("tree nesting exceeds %d levels", maxTreeDepth)
+	}
 	switch t := v.(type) {
 	case *starlark.Dict:
-		for _, k := range t.Keys() {
-			val, _, _ := t.Get(k)
-			ks := dataconv.StarString(k)
-			if isTreeComposite(val) {
-				sub := tree.Root(ks)
-				appendTreeChildren(sub, val)
-				parent.Child(sub)
-			} else {
-				parent.Child(ks + " " + dataconv.StarString(val))
-			}
-		}
+		return appendDictBranches(parent, t, depth)
 	case *starlark.List:
-		for i := 0; i < t.Len(); i++ {
-			appendTreeChild(parent, t.Index(i))
-		}
+		return appendTreeSeq(parent, t, depth)
 	case starlark.Tuple:
-		for _, e := range t {
-			appendTreeChild(parent, e)
-		}
+		return appendTreeSeq(parent, t, depth)
 	default:
 		parent.Child(dataconv.StarString(v))
+		return nil
 	}
+}
+
+// appendDictBranches renders each dict entry as a branch: a scalar value joins
+// onto the key, a composite value nests under it.
+func appendDictBranches(parent *tree.Tree, d *starlark.Dict, depth int) error {
+	for _, k := range d.Keys() {
+		val, _, _ := d.Get(k)
+		ks := dataconv.StarString(k)
+		if isTreeComposite(val) {
+			sub := tree.Root(ks)
+			if err := appendTreeChildren(sub, val, depth+1); err != nil {
+				return err
+			}
+			parent.Child(sub)
+		} else {
+			parent.Child(ks + " " + dataconv.StarString(val))
+		}
+	}
+	return nil
+}
+
+// appendTreeSeq renders each element of an indexable (list/tuple) as a node.
+func appendTreeSeq(parent *tree.Tree, seq starlark.Indexable, depth int) error {
+	for i := 0; i < seq.Len(); i++ {
+		if err := appendTreeChild(parent, seq.Index(i), depth); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // appendTreeChild adds a single list element: a composite nests as an unlabeled
 // subtree, a scalar becomes a leaf.
-func appendTreeChild(parent *tree.Tree, e starlark.Value) {
+func appendTreeChild(parent *tree.Tree, e starlark.Value, depth int) error {
 	if isTreeComposite(e) {
 		sub := tree.New()
-		appendTreeChildren(sub, e)
+		if err := appendTreeChildren(sub, e, depth+1); err != nil {
+			return err
+		}
 		parent.Child(sub)
 	} else {
 		parent.Child(dataconv.StarString(e))
 	}
+	return nil
 }

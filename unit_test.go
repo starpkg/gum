@@ -32,6 +32,7 @@ import (
 	"time"
 
 	huh "charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv/types"
 	"go.starlark.net/starlark"
@@ -697,6 +698,17 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"style bad fg", `load("gum","style")` + "\n" + `style("x", fg="notacolor")`, "fg:"},
 		{"style bad align", `load("gum","style")` + "\n" + `style("x", align="sideways")`, "unsupported align"},
 		{"style bad padding", `load("gum","style")` + "\n" + `style("x", padding="lots")`, "padding:"},
+		{"style width too large", `load("gum","style")` + "\n" + `style("x", width=99999)`, "exceeds the maximum"},
+		{"style padding too large", `load("gum","style")` + "\n" + `style("x", padding=99999)`, "exceeds the maximum"},
+		{"style padding oversized int", `load("gum","style")` + "\n" + `style("x", padding=1<<100)`, "exceeds the maximum"},
+		{"style padding unbounded iterable", `load("gum","style")` + "\n" + `style("x", padding=range(1000000))`, "at most"},
+		{"style width x lines amplification", `load("gum","style")` + "\n" + `style("x\n" * 100000, width=10000)`, "cells"},
+		{"style padding-shrunk wrap amplification", `load("gum","style")` + "\n" + `style("x" * 1001, width=10000, padding=(0, 0, 0, 9999))`, "cells"},
+		{"style width0 equalize amplification", `load("gum","style")` + "\n" + `style("x" * 10000 + "\n" * 10000)`, "cells"},
+		{"style border-skipped-wrap amplification", `load("gum","style")` + "\n" + `style("x" * 6000, width=1, border="normal", align="center", padding=(5000, 0, 5000, 0), margin=(5000, 0, 5000, 0))`, "cells"},
+		{"style tab-expansion amplification", `load("gum","style")` + "\n" + `style("\t" * 1500, padding=(10000, 0, 10000, 0))`, "cells"},
+		{"style control-char wrap amplification", `load("gum","style")` + "\n" + `style("\x01" * 3000, width=10000, padding=(0, 0, 0, 9999))`, "cells"},
+		{"tree too deep", "load(\"gum\",\"tree\")\ndef deep(n):\n    d = {\"leaf\": 1}\n    for i in range(n):\n        d = {\"k\": d}\n    return d\ntree(deep(2000))", "tree nesting exceeds"},
 		{"table non-list headers", `load("gum","table")` + "\n" + `table("nope", [])`, "headers:"},
 		{"table bad row", `load("gum","table")` + "\n" + `table(["h"], ["notarow"])`, "row 0"},
 		{"table bad border", `load("gum","table")` + "\n" + `table(["h"], [["a"]], border="bogus")`, "unsupported border style"},
@@ -793,6 +805,118 @@ func TestToIntList(t *testing.T) {
 	if _, err := toIntList(starlark.String("x")); err == nil {
 		t.Error("string should error")
 	}
+	// An out-of-range positive int must error, not silently wrap to 0 (which
+	// would slip past the maxStyleDimension check).
+	huge := starlark.MakeInt(1).Lsh(100)
+	if _, err := toIntList(huge); err == nil {
+		t.Error("oversized int should error, not wrap to 0")
+	}
+	if _, err := toIntList(starlark.NewList([]starlark.Value{starlark.MakeInt(1), huge})); err == nil {
+		t.Error("oversized int in a list should error")
+	}
+	// A negative value clamps to 0 (lipgloss does the same), so a huge negative
+	// can't truncate to a positive on a 32-bit int — and small negatives are not
+	// gratuitously rejected.
+	if got, err := toIntList(starlark.MakeInt(-5)); err != nil || len(got) != 1 || got[0] != 0 {
+		t.Errorf("negative should clamp to 0: %v, %v", got, err)
+	}
+	if got, err := toIntList(starlark.MakeInt(-1).Lsh(100)); err != nil || len(got) != 1 || got[0] != 0 {
+		t.Errorf("huge negative should clamp to 0: %v, %v", got, err)
+	}
+	// More than maxSpacingValues (4) elements is rejected before materialization.
+	tooMany := make([]starlark.Value, maxSpacingValues+1)
+	for i := range tooMany {
+		tooMany[i] = starlark.MakeInt(0)
+	}
+	if _, err := toIntList(starlark.NewList(tooMany)); err == nil {
+		t.Errorf("more than %d spacing values should error", maxSpacingValues)
+	}
+	// Exactly maxSpacingValues is allowed.
+	if got, err := toIntList(starlark.NewList(tooMany[:maxSpacingValues])); err != nil || len(got) != maxSpacingValues {
+		t.Errorf("%d spacing values should be allowed: %v, %v", maxSpacingValues, got, err)
+	}
+}
+
+// TestStyleAreaBoundUpperBound empirically verifies the DoS guard's core
+// invariant: styleAreaBound must never UNDER-count the cells lipgloss actually
+// renders. It renders a large cross-product of realistic and adversarial-shaped
+// inputs (short lines, long lines, tabs, C0 controls, wide graphemes) against
+// every width / padding / margin / border combination and asserts the bound is
+// ≥ the actual rendered rectangle (rows × widest row). A failure pinpoints an
+// exact combination where the bound is unsound.
+func TestStyleAreaBoundUpperBound(t *testing.T) {
+	texts := []string{
+		"",
+		"hello",
+		strings.Repeat("x", 300),
+		strings.Repeat("line\n", 40),
+		strings.Repeat("word ", 60), // many short words (word-wrap slack)
+		strings.Repeat("ab ", 100),  // 2-char words near half-width
+		strings.Repeat("supercalifragilistic ", 30), // long words
+		strings.Repeat("a-b-c-", 50),                // hyphen breakpoints
+		strings.Repeat("\t", 30),
+		strings.Repeat("\x01", 30),
+		strings.Repeat("\x1b\x07\x08", 20), // stray control bytes
+		"世界 " + strings.Repeat("界", 40),    // wide graphemes + space
+		strings.Repeat("界", 120),           // wide graphemes, no break
+		"😀🎉 " + strings.Repeat("🚀", 40),    // emoji clusters
+		"mixed 世 x\ttab\x01ctrl end",
+		"a\nbb\nccc\ndddd",
+		strings.Repeat("x", 3000),                                // long unbroken line
+		strings.Repeat("界", 800),                                 // long wide-grapheme run
+		strings.Repeat("x\t", 400),                               // tabs interspersed
+		strings.Repeat("\t", 600),                                // pure tabs (display > wrap advance)
+		strings.Repeat("\x07", 600),                              // pure C0 controls
+		strings.Repeat("word\n", 200) + strings.Repeat("z", 400), // many lines + a long one
+	}
+	widths := []int{0, 1, 2, 3, 5, 11, 20, 80, 200, 500}
+	spacings := [][]int{nil, {2}, {1, 3}, {0, 0, 0, 15}, {7, 0, 7, 0}, {4, 4, 4, 4}}
+	borders := []string{"", "normal", "rounded", "double", "thick"}
+
+	renderedCells := func(s string) int64 {
+		lines := strings.Split(s, "\n")
+		var maxW int64
+		for _, ln := range lines {
+			if w := int64(lipgloss.Width(ln)); w > maxW {
+				maxW = w
+			}
+		}
+		return int64(len(lines)) * maxW
+	}
+
+	for _, text := range texts {
+		for _, width := range widths {
+			for _, pad := range spacings {
+				for _, margin := range spacings {
+					for _, border := range borders {
+						st := lipgloss.NewStyle()
+						if border != "" {
+							bd, err := parseBorder(border)
+							if err != nil {
+								t.Fatalf("parseBorder(%q): %v", border, err)
+							}
+							st = st.Border(bd)
+						}
+						if pad != nil {
+							st = st.Padding(pad...)
+						}
+						if margin != nil {
+							st = st.Margin(margin...)
+						}
+						if width > 0 {
+							st = st.Width(width)
+						}
+						bound := styleAreaBound(text, st)
+						actual := renderedCells(st.Render(text))
+						if actual > bound {
+							t.Errorf("under-count: bound=%d actual=%d text=%q width=%d pad=%v margin=%v border=%q",
+								bound, actual, text, width, pad, margin, border)
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 func TestStarStringSlice(t *testing.T) {
@@ -847,6 +971,23 @@ def check():
         fail("missing text: " + r)
     if "╭" not in r:
         fail("missing rounded border: " + r)
+check()`,
+		// A legitimate multi-line render at a real width (and a harmless negative
+		// margin) must NOT be rejected by the area bound.
+		"style large ok": `load("gum", "style")
+def check():
+    r = style("line\n" * 500, width = 80, margin = -3)
+    if "line" not in r:
+        fail("missing text")
+check()`,
+		// A long single line wrapped to a real width is legitimate (output ≈ input,
+		// not amplified) and must NOT be rejected: the wrap branch bounds it by the
+		// fixed width, not the unwrapped length.
+		"style long line wraps ok": `load("gum", "style")
+def check():
+    r = style("x" * 100000, width = 80)
+    if "x" not in r:
+        fail("missing text")
 check()`,
 		"table": `load("gum", "table")
 def check():
