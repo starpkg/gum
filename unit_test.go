@@ -33,10 +33,25 @@ import (
 
 	huh "charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/1set/starlet"
 	"github.com/1set/starlet/dataconv/types"
 	"go.starlark.net/starlark"
 )
+
+// renderedRectCells returns the cell count of a rendered block as its bounding
+// rectangle (line count × widest line). The DoS bounds model the render this way,
+// so the property tests compare against the same measure.
+func renderedRectCells(s string) int64 {
+	lines := strings.Split(s, "\n")
+	var maxW int64
+	for _, ln := range lines {
+		if w := int64(lipgloss.Width(ln)); w > maxW {
+			maxW = w
+		}
+	}
+	return int64(len(lines)) * maxW
+}
 
 // runGumScript runs a Starlark script with a fresh gum module loaded and
 // returns the resulting error (nil on success). It needs no TTY because every
@@ -712,11 +727,15 @@ func TestBuiltinErrorBranches(t *testing.T) {
 		{"table non-list headers", `load("gum","table")` + "\n" + `table("nope", [])`, "headers:"},
 		{"table bad row", `load("gum","table")` + "\n" + `table(["h"], ["notarow"])`, "row 0"},
 		{"table bad border", `load("gum","table")` + "\n" + `table(["h"], [["a"]], border="bogus")`, "unsupported border style"},
+		{"table many-rows amplification", `load("gum","table")` + "\n" + `table(["x" * 9000], [["y"]] * 200000)`, "exceeds the maximum"},
+		{"table wide-cell amplification", `load("gum","table")` + "\n" + `table(["h"], [["z" * 9000]] * 2000)`, "exceeds the maximum"},
 		{"filter empty options", `load("gum","filter")` + "\n" + `filter([])`, "options must not be empty"},
 		{"filter non-iterable", `load("gum","filter")` + "\n" + `filter(123)`, "iterable or mapping"},
 		{"compose bad dir", `load("gum","compose")` + "\n" + `compose(["a"], dir="diagonal")`, "unsupported dir"},
 		{"compose non-list blocks", `load("gum","compose")` + "\n" + `compose("nope")`, "blocks:"},
 		{"compose bad align", `load("gum","compose")` + "\n" + `compose(["a"], align="sideways")`, "unsupported align"},
+		{"compose vertical amplification", `load("gum","compose")` + "\n" + `compose(["x" * 9000] + ["y"] * 200000, dir="v")`, "exceeds the maximum"},
+		{"compose horizontal amplification", `load("gum","compose")` + "\n" + `compose(["x\n" * 9000] + ["y"] * 200000, dir="h")`, "exceeds the maximum"},
 		{"code_block empty text", `load("gum","code_block")` + "\n" + `code_block("")`, "text is required"},
 	}
 	for _, tt := range tests {
@@ -873,17 +892,6 @@ func TestStyleAreaBoundUpperBound(t *testing.T) {
 	spacings := [][]int{nil, {2}, {1, 3}, {0, 0, 0, 15}, {7, 0, 7, 0}, {4, 4, 4, 4}}
 	borders := []string{"", "normal", "rounded", "double", "thick"}
 
-	renderedCells := func(s string) int64 {
-		lines := strings.Split(s, "\n")
-		var maxW int64
-		for _, ln := range lines {
-			if w := int64(lipgloss.Width(ln)); w > maxW {
-				maxW = w
-			}
-		}
-		return int64(len(lines)) * maxW
-	}
-
 	for _, text := range texts {
 		for _, width := range widths {
 			for _, pad := range spacings {
@@ -907,13 +915,110 @@ func TestStyleAreaBoundUpperBound(t *testing.T) {
 							st = st.Width(width)
 						}
 						bound := styleAreaBound(text, st)
-						actual := renderedCells(st.Render(text))
+						actual := renderedRectCells(st.Render(text))
 						if actual > bound {
 							t.Errorf("under-count: bound=%d actual=%d text=%q width=%d pad=%v margin=%v border=%q",
 								bound, actual, text, width, pad, margin, border)
 						}
 					}
 				}
+			}
+		}
+	}
+}
+
+// TestTableAreaBoundUpperBound verifies tableAreaBound never under-counts what
+// lipgloss's content-sized table actually renders, across many/wide/multi-line/
+// control-laden/ragged cell grids and every border.
+func TestTableAreaBoundUpperBound(t *testing.T) {
+	makeRows := func(n, cols int) [][]string {
+		rows := make([][]string, n)
+		for i := range rows {
+			r := make([]string, cols)
+			for c := range r {
+				r[c] = strings.Repeat("v", c+1)
+			}
+			rows[i] = r
+		}
+		return rows
+	}
+	headerSets := [][]string{
+		{"a", "b"},
+		{"header one", "h2", "third col"},
+		{strings.Repeat("w", 200)},
+		{"x\ty", "tab\x01"},
+		{"世界", "wide"},
+	}
+	rowSets := [][][]string{
+		{{"1", "2"}},
+		{{"aaa", "b"}, {"c", "ddddd"}},
+		makeRows(400, 3),
+		{{strings.Repeat("z", 500)}},
+		{{"multi\nline\ncell", "x"}},
+		{{"", ""}},
+		{{"ragged"}, {"a", "b", "c"}},
+		{{"tabs\there\tcols"}, {"界界界"}},
+		{{strings.Repeat("\t", 40)}, {strings.Repeat("\x07", 30)}}, // cells sizing treats as zero-width
+	}
+	borders := []string{"", "rounded", "normal", "double", "thick"}
+	for _, headers := range headerSets {
+		for _, rows := range rowSets {
+			for _, border := range borders {
+				tb := table.New().Headers(headers...).Rows(rows...)
+				if border != "" {
+					bd, err := parseBorder(border)
+					if err != nil {
+						t.Fatalf("parseBorder(%q): %v", border, err)
+					}
+					tb = tb.Border(bd)
+				}
+				bound := tableAreaBound(headers, rows)
+				actual := renderedRectCells(tb.String())
+				if actual > bound {
+					t.Errorf("table under-count: bound=%d actual=%d headers=%v rows=%d border=%q",
+						bound, actual, headers, len(rows), border)
+				}
+			}
+		}
+	}
+}
+
+// TestComposeAreaBoundUpperBound verifies composeAreaBound never under-counts
+// what lipgloss.Join{Vertical,Horizontal} actually renders, across many blocks,
+// one large block among small ones, multi-line, wide-grapheme and control blocks.
+func TestComposeAreaBoundUpperBound(t *testing.T) {
+	manyBlocks := func(n int) []string {
+		b := make([]string, n)
+		for i := range b {
+			b[i] = "row"
+		}
+		return b
+	}
+	blockSets := [][]string{
+		{"a", "b"},
+		{"one\ntwo", "three"},
+		{strings.Repeat("w", 300)},
+		manyBlocks(400),
+		{strings.Repeat("x\n", 100), "y"},
+		{"tab\there", "\x01ctrl"},
+		{"世界\n界界", "ok"},
+		{"", "", "x"},
+		{strings.Repeat("wide ", 100), "a\nb\nc\nd"},
+		{strings.Repeat("\t", 60), strings.Repeat("\x07", 40)}, // blocks sizing treats as zero-width
+	}
+	for _, blocks := range blockSets {
+		for _, horizontal := range []bool{false, true} {
+			var joined string
+			if horizontal {
+				joined = lipgloss.JoinHorizontal(lipgloss.Top, blocks...)
+			} else {
+				joined = lipgloss.JoinVertical(lipgloss.Left, blocks...)
+			}
+			bound := composeAreaBound(blocks, horizontal)
+			actual := renderedRectCells(joined)
+			if actual > bound {
+				t.Errorf("compose under-count: bound=%d actual=%d horizontal=%v blocks=%d",
+					bound, actual, horizontal, len(blocks))
 			}
 		}
 	}
