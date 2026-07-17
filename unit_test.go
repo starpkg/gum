@@ -958,6 +958,7 @@ func TestTableAreaBoundUpperBound(t *testing.T) {
 		{{"", ""}},
 		{{"ragged"}, {"a", "b", "c"}},
 		{{"tabs\there\tcols"}, {"界界界"}},
+		{{strings.Repeat("\t", 40)}, {strings.Repeat("\x07", 30)}}, // cells sizing treats as zero-width
 	}
 	borders := []string{"", "rounded", "normal", "double", "thick"}
 	for _, headers := range headerSets {
@@ -1003,6 +1004,7 @@ func TestComposeAreaBoundUpperBound(t *testing.T) {
 		{"世界\n界界", "ok"},
 		{"", "", "x"},
 		{strings.Repeat("wide ", 100), "a\nb\nc\nd"},
+		{strings.Repeat("\t", 60), strings.Repeat("\x07", 40)}, // blocks sizing treats as zero-width
 	}
 	for _, blocks := range blockSets {
 		for _, horizontal := range []bool{false, true} {
