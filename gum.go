@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	huh "charm.land/huh/v2"
@@ -124,10 +123,13 @@ func newModuleWithOptions(widthOpt *base.ConfigOption[int], heightOpt *base.Conf
 	}
 }
 
-// resolveEditor returns the external editor command write should use, resolved
-// once from host-controlled sources so a script can never choose it: the
-// host-only `editor` config, else the $EDITOR snapshot taken at construction,
-// else a fixed default. It is always non-empty.
+// resolveEditor returns the external editor command write passes to huh, resolved
+// only from host-controlled sources so a script can never NAME it: the host-only
+// `editor` config, else the $EDITOR snapshot taken at construction, else a fixed
+// default. It is always non-empty, so huh runs a host-chosen command rather than
+// the live (script-mutable) $EDITOR. (huh still resolves that command via the live
+// PATH and the subprocess inherits the live environment — a residual only the
+// host/sandbox can close; see the note above starWrite.)
 func (m *Module) resolveEditor() []string {
 	if cfg, err := base.GetConfigValue[[]string](m.cfgMod, configKeyEditor); err == nil && len(cfg) > 0 {
 		return cfg
@@ -136,32 +138,6 @@ func (m *Module) resolveEditor() []string {
 		return m.editorEnv
 	}
 	return []string{defaultWriteEditor}
-}
-
-// editorEnvMu serializes the brief $EDITOR pin in newHostEditorText, since it
-// mutates the process environment that huh.NewText reads.
-var editorEnvMu sync.Mutex
-
-// newHostEditorText builds a huh.Text whose external editor — command AND
-// arguments — is fixed to the host-resolved value. huh.NewText captures $EDITOR
-// (both parts) at construction and its Editor() setter can't clear leaked
-// arguments, so $EDITOR is pinned to the resolved editor just for the duration of
-// NewText. A script's runtime.setenv then can't inject the command or its args
-// into the process huh runs via os/exec on Ctrl+E.
-func (m *Module) newHostEditorText() *huh.Text {
-	editor := m.resolveEditor()
-	editorEnvMu.Lock()
-	defer editorEnvMu.Unlock()
-	prev, had := os.LookupEnv("EDITOR")
-	_ = os.Setenv("EDITOR", strings.Join(editor, " "))
-	defer func() {
-		if had {
-			_ = os.Setenv("EDITOR", prev)
-		} else {
-			_ = os.Unsetenv("EDITOR")
-		}
-	}()
-	return huh.NewText().Editor(editor...)
 }
 
 // LoadModule returns the Starlark module loader with the gum-specific functions.

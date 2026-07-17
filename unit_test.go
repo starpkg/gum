@@ -1361,28 +1361,6 @@ func TestEditorResolutionIsHostControlled(t *testing.T) {
 	}
 }
 
-// TestNewHostEditorTextPinIsTransactional verifies newHostEditorText pins $EDITOR
-// only for the duration of huh.NewText (which captures the command AND args from
-// it) and restores the live value afterward — so the pin closes huh's arg-leak
-// without permanently mutating the process environment.
-func TestNewHostEditorTextPinIsTransactional(t *testing.T) {
-	m := NewModuleWithConfig(50, 5, "charm", []string{"vim"})
-	// A pre-existing (script-set) $EDITOR is restored, not left pinned.
-	t.Setenv("EDITOR", "vim -c :!attacker")
-	if txt := m.newHostEditorText(); txt == nil {
-		t.Fatal("newHostEditorText returned nil")
-	}
-	if got := os.Getenv("EDITOR"); got != "vim -c :!attacker" {
-		t.Errorf("EDITOR not restored after pin: %q", got)
-	}
-	// With no prior $EDITOR, it is left unset (not stuck at the pinned value).
-	os.Unsetenv("EDITOR")
-	_ = m.newHostEditorText()
-	if _, had := os.LookupEnv("EDITOR"); had {
-		t.Error("EDITOR should remain unset after the pin")
-	}
-}
-
 // TestSetThemeOverride verifies set_theme is the gum override that applies the
 // theme immediately (invariant 4): after the call the module's resolved theme
 // must match the new name, and an unknown name must fall back without error.

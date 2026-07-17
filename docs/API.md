@@ -104,15 +104,21 @@ Parameters:
 - `show_help`: Show help key bindings (default: `True`).
 - `timeout`: Timeout in seconds (default: `0` — no timeout).
 
-The external editor opened with **Ctrl+E** runs the host-configured `editor`
-command (via `os/exec`). A script **cannot** choose it — there is no per-call
-`editor` argument and no `set_editor` — so an untrusted script can't make the host
-run an arbitrary command. The editor is resolved once from host-controlled
-sources: the `editor` config (see [Configuration](#configuration)), else the
-host's `$EDITOR` **captured at module construction**, else `nano`. The live
-`$EDITOR` is never used, so a script cannot inject the editor command *or its
-arguments* (which for some editors would be code execution) by mutating `$EDITOR`
-at runtime.
+The external editor opened with **Ctrl+E** runs a host-configured `editor`
+command (via `os/exec`). A script **cannot name it** — there is no per-call
+`editor` argument and no `set_editor`; the command is resolved only from
+host-controlled sources: the `editor` config (see [Configuration](#configuration)),
+else the host's `$EDITOR` **captured at module construction**, else `nano`.
+
+> **Residual (host/sandbox concern).** `huh`/`bubbletea` — not `gum` — construct
+> the subprocesses they run (the editor on Ctrl+E, and a `tmux` probe during
+> terminal detection on *any* form). These inherit the live process environment
+> and resolve bare command names via the live `PATH`. A host that lets an
+> untrusted script mutate that environment (e.g. by exposing a `runtime` module's
+> `setenv`) can therefore still influence what actually executes — `PATH`
+> resolution of the command, editor env such as `VIMINIT`, or the `tmux` probe.
+> `gum` cannot set those subprocesses' environment; close this by not granting
+> untrusted scripts process-environment mutation, or by sandboxing the interpreter.
 
 Returns the entered text as a string, or `None` if cancelled or timed out.
 
@@ -743,7 +749,7 @@ its environment value at construction — the editor is set host-side only, via
 | `width` | `get_width` | `set_width` | `GUM_WIDTH` | `50` | Default width for TUI components (`0` = terminal width). |
 | `height` | `get_height` | `set_height` | `GUM_HEIGHT` | `0` | Default height for components (`0` = automatic). |
 | `theme` | `get_theme` | `set_theme` | `GUM_THEME` | `charm` | Theme name. **`set_theme` is overridden by `gum`** to re-apply the theme immediately (see above). |
-| `editor` | `get_editor` | _host-only, no `set_editor`_ | `GUM_EDITOR` | `[]` | External editor command for `write` (e.g. `["vim", "-f"]`); empty falls back to the host's `$EDITOR` snapshot (taken at construction), else `nano`. **Host-only** — a script cannot set it, and the live `$EDITOR` is never used. |
+| `editor` | `get_editor` | _host-only, no `set_editor`_ | `GUM_EDITOR` | `[]` | External editor command for `write` (e.g. `["vim", "-f"]`); empty falls back to the host's `$EDITOR` snapshot (taken at construction), else `nano`. **Host-only** — a script cannot name it (see the residual note in [`write`](#write)). |
 
 Available themes: `base` (minimal, monochrome), `base16` (simple 16-color),
 `charm` (default), `dracula`, `catppuccin`.

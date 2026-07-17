@@ -27,8 +27,19 @@ import (
 // - timeout: Timeout in seconds (0 for no timeout)
 //
 // The external editor (opened with Ctrl+E) is the host-configured `editor`, which
-// huh runs via os/exec — a script cannot choose it (no per-call editor argument,
-// no set_editor). See the host-only `editor` config option.
+// huh runs via os/exec — a script cannot NAME it (no per-call editor argument, no
+// set_editor; resolveEditor picks it from host-controlled sources only).
+//
+// Residual (not closable within gum): huh/bubbletea, not gum, construct the
+// subprocesses they run (the editor on Ctrl+E, and a `tmux` probe during terminal
+// detection on any form). Those inherit the live process environment and resolve
+// bare command names via the live PATH, so a host that lets an untrusted script
+// mutate that environment (e.g. by exposing a `runtime` module's `setenv`) can
+// still influence what actually executes — PATH resolution of the command,
+// editor env such as VIMINIT, or the tmux probe. Unlike the `cmd` module (which
+// sanitizes its own child env), gum cannot set those subprocesses' Cmd.Env/Path.
+// Close this at the host/sandbox level: don't grant untrusted scripts process
+// -environment mutation, or run the interpreter with an isolated environment.
 func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		initialValue    starlark.Value         // initial value, converted to string if not already
@@ -59,23 +70,25 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		return none, err
 	}
 
-	// The editor is host-configured only — a script can neither pass it per call
-	// nor set it. newHostEditorText builds the huh text with the editor command
-	// AND arguments pinned to the host-resolved value, so huh never runs the live
-	// (script-mutable) $EDITOR — command or args — via os/exec on Ctrl+E.
+	// The editor COMMAND is host-configured only — a script can neither pass it per
+	// call (no editor= argument) nor set it (no set_editor). resolveEditor picks it
+	// from host-controlled sources, so huh runs a host-chosen command, never one the
+	// script named. (huh still resolves that command via the live PATH and the
+	// subprocess inherits the live environment — see the note above starWrite for
+	// the residual that only the host/sandbox can close.)
 	value := dataconv.StarString(initialValue)
-	text := m.newHostEditorText().
-		Title(title).
-		Description(description).
-		Placeholder(placeholder).
-		Validate(convertStringValidator(thread, &validateFunc)).
-		CharLimit(charLimit).
-		ShowLineNumbers(showLineNumbers).
-		Value(&value)
-
-	// run form
 	err := huh.NewForm(
-		huh.NewGroup(text),
+		huh.NewGroup(
+			huh.NewText().
+				Title(title).
+				Description(description).
+				Placeholder(placeholder).
+				Validate(convertStringValidator(thread, &validateFunc)).
+				CharLimit(charLimit).
+				ShowLineNumbers(showLineNumbers).
+				Editor(m.resolveEditor()...).
+				Value(&value),
+		),
 	).
 		WithWidth(m.getWidth(width)).
 		WithHeight(m.getHeight(height)).
