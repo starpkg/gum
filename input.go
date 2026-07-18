@@ -28,17 +28,18 @@ import (
 //
 // The external editor (opened with Ctrl+E) is the host-configured `editor`, which
 // huh runs via os/exec — a script cannot NAME it (no per-call editor argument, no
-// set_editor; resolveEditor picks it from host-controlled sources only).
+// set_editor; resolveEditor picks it from host-controlled sources only) nor
+// PATH-hijack it (the command is frozen to an absolute path at construction).
 //
 // Residual (not closable within gum): huh/bubbletea, not gum, construct the
-// subprocesses they run (the editor on Ctrl+E, and a `tmux` probe during terminal
-// detection on any form). Those inherit the live process environment and resolve
-// bare command names via the live PATH, so a host that lets an untrusted script
-// mutate that environment (e.g. by exposing a `runtime` module's `setenv`) can
-// still influence what actually executes — PATH resolution of the command,
-// editor env such as VIMINIT, or the tmux probe. Unlike the `cmd` module (which
-// sanitizes its own child env), gum cannot set those subprocesses' Cmd.Env/Path.
-// Close this at the host/sandbox level: don't grant untrusted scripts process
+// subprocesses they run, and gum cannot set their Cmd.Env (unlike the `cmd`
+// module's util.BuildChildEnv). So a host that lets an untrusted script mutate the
+// process environment (e.g. by exposing a `runtime` module's `setenv`) leaves two
+// surfaces: (1) the editor subprocess inherits the live environment, so editor env
+// such as VIMINIT executes for editors that honor it (e.g. vim); (2) bubbletea's
+// terminal color-detection execs a bare `tmux` (live PATH) on ANY form — including
+// `spin`, whose huh spinner exposes no way to pass a sanitized environment. Close
+// these at the host/sandbox level: don't grant untrusted scripts process
 // -environment mutation, or run the interpreter with an isolated environment.
 func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (

@@ -28,6 +28,7 @@ import (
 	"image/color"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -1334,30 +1335,31 @@ func TestEditorIsHostOnly(t *testing.T) {
 	}
 }
 
-// TestEditorResolutionIsHostControlled verifies write's editor is resolved only
-// from host-controlled sources, and — crucially — that a $EDITOR mutation AFTER
-// construction (what a script's runtime.setenv would do) cannot change it. huh
-// reads the live $EDITOR itself, so resolveEditor must always return a non-empty
-// host-chosen command to override that fallback.
+// TestEditorResolutionIsHostControlled verifies write's editor is frozen at
+// construction from host-controlled sources — and crucially that a $EDITOR (or
+// PATH) mutation AFTER construction (what a script's runtime.setenv would do)
+// cannot change the command or its resolved path. The command may be rewritten to
+// an absolute path, so assertions compare the base name and preserve the args.
 func TestEditorResolutionIsHostControlled(t *testing.T) {
-	// The host `editor` config takes precedence.
-	if got := NewModuleWithConfig(50, 5, "charm", []string{"vim", "-f"}).resolveEditor(); len(got) != 2 || got[0] != "vim" {
-		t.Errorf("config editor = %v, want [vim -f]", got)
+	// The host `editor` config takes precedence; args are preserved.
+	got := NewModuleWithConfig(50, 5, "charm", []string{"vim", "-f"}).resolveEditor()
+	if len(got) != 2 || filepath.Base(got[0]) != "vim" || got[1] != "-f" {
+		t.Errorf("config editor = %v, want a vim command with -f", got)
 	}
 	// No config editor: the $EDITOR snapshot at construction is used, and a later
-	// mutation of the live env does NOT change it.
+	// mutation of the live env does NOT change the frozen result.
 	t.Setenv("EDITOR", "hosteditor --flag")
 	m := NewModule()
 	os.Setenv("EDITOR", "attacker") // simulate a script's runtime.setenv after construction
-	if got := m.resolveEditor(); len(got) == 0 || got[0] != "hosteditor" {
-		t.Errorf("editor should be the construction-time snapshot, got %v", got)
+	if g := m.resolveEditor(); len(g) == 0 || filepath.Base(g[0]) != "hosteditor" || g[len(g)-1] != "--flag" {
+		t.Errorf("editor should be the construction-time snapshot, got %v", g)
 	}
-	// Neither config nor $EDITOR: a fixed default, never the live $EDITOR.
+	// Neither config nor $EDITOR: the fixed default, frozen at construction.
 	t.Setenv("EDITOR", "")
 	m2 := NewModule()
 	os.Setenv("EDITOR", "attacker")
-	if got := m2.resolveEditor(); len(got) != 1 || got[0] != defaultWriteEditor {
-		t.Errorf("editor fallback = %v, want [%s]", got, defaultWriteEditor)
+	if g := m2.resolveEditor(); len(g) == 0 || filepath.Base(g[0]) != defaultWriteEditor {
+		t.Errorf("editor fallback = %v, want base %s", g, defaultWriteEditor)
 	}
 }
 

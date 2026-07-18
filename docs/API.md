@@ -105,20 +105,22 @@ Parameters:
 - `timeout`: Timeout in seconds (default: `0` — no timeout).
 
 The external editor opened with **Ctrl+E** runs a host-configured `editor`
-command (via `os/exec`). A script **cannot name it** — there is no per-call
-`editor` argument and no `set_editor`; the command is resolved only from
-host-controlled sources: the `editor` config (see [Configuration](#configuration)),
-else the host's `$EDITOR` **captured at module construction**, else `nano`.
+command (via `os/exec`). A script **cannot name it** (no per-call `editor`
+argument and no `set_editor`) **nor PATH-hijack it**: the command is resolved only
+from host-controlled sources — the `editor` config (see
+[Configuration](#configuration)), else the host's `$EDITOR` **captured at module
+construction**, else `nano` — and frozen to an absolute path at construction.
 
 > **Residual (host/sandbox concern).** `huh`/`bubbletea` — not `gum` — construct
-> the subprocesses they run (the editor on Ctrl+E, and a `tmux` probe during
-> terminal detection on *any* form). These inherit the live process environment
-> and resolve bare command names via the live `PATH`. A host that lets an
-> untrusted script mutate that environment (e.g. by exposing a `runtime` module's
-> `setenv`) can therefore still influence what actually executes — `PATH`
-> resolution of the command, editor env such as `VIMINIT`, or the `tmux` probe.
-> `gum` cannot set those subprocesses' environment; close this by not granting
-> untrusted scripts process-environment mutation, or by sandboxing the interpreter.
+> the subprocesses they run, and `gum` cannot set their environment. So a host
+> that lets an untrusted script mutate the process environment (e.g. by exposing a
+> `runtime` module's `setenv`) leaves two surfaces: the **editor subprocess
+> inherits the live environment**, so editor env such as `VIMINIT` executes for
+> editors that honor it (e.g. vim); and **bubbletea's color detection execs a bare
+> `tmux`** (via the live `PATH`) during terminal detection on *any* form,
+> including `spin` (whose spinner exposes no environment hook). Close these by not
+> granting untrusted scripts process-environment mutation, or by sandboxing the
+> interpreter.
 
 Returns the entered text as a string, or `None` if cancelled or timed out.
 
