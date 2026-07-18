@@ -1341,9 +1341,12 @@ func TestEditorIsHostOnly(t *testing.T) {
 // cannot change the command or its resolved path. The command may be rewritten to
 // an absolute path, so assertions compare the base name and preserve the args.
 func TestEditorResolutionIsHostControlled(t *testing.T) {
+	// cmdBase returns the command's base name without any extension, so an
+	// absolute Windows path like C:\...\vim.exe compares equal to "vim".
+	cmdBase := func(p string) string { return strings.TrimSuffix(filepath.Base(p), filepath.Ext(p)) }
 	// The host `editor` config takes precedence; args are preserved.
 	got := NewModuleWithConfig(50, 5, "charm", []string{"vim", "-f"}).resolveEditor()
-	if len(got) != 2 || filepath.Base(got[0]) != "vim" || got[1] != "-f" {
+	if len(got) != 2 || cmdBase(got[0]) != "vim" || got[1] != "-f" {
 		t.Errorf("config editor = %v, want a vim command with -f", got)
 	}
 	// No config editor: the $EDITOR snapshot at construction is used, and a later
@@ -1351,14 +1354,14 @@ func TestEditorResolutionIsHostControlled(t *testing.T) {
 	t.Setenv("EDITOR", "hosteditor --flag")
 	m := NewModule()
 	os.Setenv("EDITOR", "attacker") // simulate a script's runtime.setenv after construction
-	if g := m.resolveEditor(); len(g) == 0 || filepath.Base(g[0]) != "hosteditor" || g[len(g)-1] != "--flag" {
+	if g := m.resolveEditor(); len(g) == 0 || cmdBase(g[0]) != "hosteditor" || g[len(g)-1] != "--flag" {
 		t.Errorf("editor should be the construction-time snapshot, got %v", g)
 	}
 	// Neither config nor $EDITOR: the fixed default, frozen at construction.
 	t.Setenv("EDITOR", "")
 	m2 := NewModule()
 	os.Setenv("EDITOR", "attacker")
-	if g := m2.resolveEditor(); len(g) == 0 || filepath.Base(g[0]) != defaultWriteEditor {
+	if g := m2.resolveEditor(); len(g) == 0 || cmdBase(g[0]) != defaultWriteEditor {
 		t.Errorf("editor fallback = %v, want base %s", g, defaultWriteEditor)
 	}
 }
