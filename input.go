@@ -8,12 +8,11 @@ import (
 	huh "charm.land/huh/v2"
 	"github.com/1set/starlet/dataconv"
 	"github.com/1set/starlet/dataconv/types"
-	"github.com/starpkg/base"
 	"go.starlark.net/starlark"
 )
 
 // starWrite is a Starlark function to create a TUI text area for getting multi-line input from the user.
-// def write(value: str = "", placeholder: str = "Write something...", title: str = "", description: str = "", char_limit: int = 0, validate: Callable = None, editor: List[str] = None, width: int = 50, height: int = 5, show_line: bool = false, show_help: bool = true, timeout: float = 0) -> str
+// def write(value: str = "", placeholder: str = "Write something...", title: str = "", description: str = "", char_limit: int = 0, validate: Callable = None, width: int = 50, height: int = 5, show_line: bool = false, show_help: bool = true, timeout: float = 0) -> str
 // Parameters:
 // - value: Initial text value
 // - placeholder: Placeholder text when empty
@@ -21,26 +20,40 @@ import (
 // - description: Description text
 // - char_limit: Maximum number of characters (0 for no limit)
 // - validate: Validation function that returns error message or None
-// - editor: Editor command as list of strings (e.g. ["vim", "-f"]). If None or empty list, uses the default editor from configuration.
 // - width: Text area width (0 for terminal width)
 // - height: Text area height
 // - show_line: Show line numbers
 // - show_help: Show help key binds
 // - timeout: Timeout in seconds (0 for no timeout)
+//
+// The external editor (opened with Ctrl+E) is the host-configured `editor`, which
+// huh runs via os/exec — a script cannot NAME it (no per-call editor argument, no
+// set_editor; resolveEditor picks it from host-controlled sources only) nor
+// PATH-hijack it (the command is frozen to an absolute path at construction).
+//
+// Residual (not closable within gum): huh/bubbletea, not gum, construct the
+// subprocesses they run, and gum cannot set their Cmd.Env (unlike the `cmd`
+// module's util.BuildChildEnv). So a host that lets an untrusted script mutate the
+// process environment (e.g. by exposing a `runtime` module's `setenv`) leaves two
+// surfaces: (1) the editor subprocess inherits the live environment, so editor env
+// such as VIMINIT executes for editors that honor it (e.g. vim); (2) bubbletea's
+// terminal color-detection execs a bare `tmux` (live PATH) on ANY form — including
+// `spin`, whose huh spinner exposes no way to pass a sanitized environment. Close
+// these at the host/sandbox level: don't grant untrusted scripts process
+// -environment mutation, or run the interpreter with an isolated environment.
 func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		initialValue    starlark.Value                                   // initial value, converted to string if not already
-		placeholder     = "Write something..."                           // placeholder value
-		title           = ""                                             // title text
-		description     = ""                                             // description text
-		charLimit       = 0                                              // maximum value length (0 for no limit)
-		validateFunc    types.NullableCallable                           // validation function
-		editor          = types.NewOneOrManyNoDefault[starlark.String]() // editor command or list of command with arguments
-		width           = 50                                             // text area width (0 for terminal width)
-		height          = 5                                              // text area height
-		showLineNumbers = false                                          // show line numbers
-		showHelp        = true                                           // show help key binds
-		timeoutSec      = types.FloatOrInt(0)                            // timeout in seconds (0 for no timeout)
+		initialValue    starlark.Value         // initial value, converted to string if not already
+		placeholder     = "Write something..." // placeholder value
+		title           = ""                   // title text
+		description     = ""                   // description text
+		charLimit       = 0                    // maximum value length (0 for no limit)
+		validateFunc    types.NullableCallable // validation function
+		width           = 50                   // text area width (0 for terminal width)
+		height          = 5                    // text area height
+		showLineNumbers = false                // show line numbers
+		showHelp        = true                 // show help key binds
+		timeoutSec      = types.FloatOrInt(0)  // timeout in seconds (0 for no timeout)
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
 		"value?", &initialValue,
@@ -49,7 +62,6 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		"description?", &description,
 		"char_limit?", &charLimit,
 		"validate?", &validateFunc,
-		"editor?", editor,
 		"width?", &width,
 		"height?", &height,
 		"show_line?", &showLineNumbers,
@@ -59,16 +71,12 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 		return none, err
 	}
 
-	// Get editor command, use default if none provided
-	editorCmd := convertListToStrings(editor)
-	if len(editorCmd) == 0 {
-		// Get default editor from config
-		if val, err := base.GetConfigValue[[]string](m.cfgMod, configKeyEditor); err == nil {
-			editorCmd = val
-		}
-	}
-
-	// run form
+	// The editor COMMAND is host-configured only — a script can neither pass it per
+	// call (no editor= argument) nor set it (no set_editor). resolveEditor picks it
+	// from host-controlled sources, so huh runs a host-chosen command, never one the
+	// script named. (huh still resolves that command via the live PATH and the
+	// subprocess inherits the live environment — see the note above starWrite for
+	// the residual that only the host/sandbox can close.)
 	value := dataconv.StarString(initialValue)
 	err := huh.NewForm(
 		huh.NewGroup(
@@ -79,7 +87,7 @@ func (m *Module) starWrite(thread *starlark.Thread, b *starlark.Builtin, args st
 				Validate(convertStringValidator(thread, &validateFunc)).
 				CharLimit(charLimit).
 				ShowLineNumbers(showLineNumbers).
-				Editor(editorCmd...).
+				Editor(m.resolveEditor()...).
 				Value(&value),
 		),
 	).

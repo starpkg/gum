@@ -8,12 +8,15 @@
 //   - width: default width for components (0 for terminal width)
 //   - height: default height for components
 //   - theme: theme name to use (base, base16, charm, dracula, catppuccin)
-//   - editor: default editor command for multi-line input (e.g. ["vim", "-f"])
+//   - editor: host-only default editor command for multi-line input (e.g.
+//     ["vim", "-f"]); set only host-side, never by a script
 package gum
 
 import (
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -50,7 +53,21 @@ type Module struct {
 	theme   huh.Theme
 	keymap  *huh.KeyMap
 	isReady bool
+	// editorEnv snapshots the host's $EDITOR at construction (before any script
+	// runs). It is the fallback editor when the host set no explicit `editor`
+	// config, so write never reads the live $EDITOR — which a script could mutate
+	// via runtime.setenv to choose the command huh runs on Ctrl+E.
+	editorEnv []string
+	// editorCmd is the frozen write editor: resolved from host-controlled sources
+	// at construction, with its command rewritten to an absolute path so a script
+	// can't PATH-hijack it.
+	editorCmd []string
 }
+
+// defaultWriteEditor is the last-resort external editor when neither the host's
+// `editor` config nor its $EDITOR is set — a fixed command so a script can't
+// steer huh's own live-$EDITOR fallback.
+const defaultWriteEditor = "nano"
 
 // NewModule creates a new instance of Module with default configurations.
 // The default configurations include:
@@ -63,7 +80,10 @@ func NewModule() *Module {
 		genConfigOption(configKeyWidth, "Default width for components", 50), // (0 for terminal width)
 		genConfigOption(configKeyHeight, "Default height for components", 0),
 		genConfigOption(configKeyTheme, "Theme name to use (base, base16, charm, dracula, catppuccin)", "charm"),
-		genConfigOption(configKeyEditor, "Default editor command (e.g. ['vim', '-f'])", []string{}),
+		// Host-only: the editor command is passed to huh, which runs it via os/exec
+		// when the user opens the external editor. A script must not be able to
+		// choose that command, so base generates no set_editor and snapshots the env.
+		genConfigOption(configKeyEditor, "Default editor command (e.g. ['vim', '-f'])", []string{}).SetHostOnly(true),
 	)
 }
 
@@ -78,7 +98,7 @@ func NewModuleWithConfig(width, height int, themeName string, editor []string) *
 		genConfigOption(configKeyWidth, "Default width for components with preset value", width),
 		genConfigOption(configKeyHeight, "Default height for components with preset value", height),
 		genConfigOption(configKeyTheme, "Theme name to use with preset value", themeName),
-		genConfigOption(configKeyEditor, "Default editor command with preset value", editor),
+		genConfigOption(configKeyEditor, "Default editor command with preset value", editor).SetHostOnly(true),
 	)
 }
 
@@ -99,10 +119,52 @@ func newModuleWithOptions(widthOpt *base.ConfigOption[int], heightOpt *base.Conf
 		themeOpt,
 		editorOpt,
 	)
-	return &Module{
+	m := &Module{
 		cfgMod: cm,
 		ext:    cm.Extend(),
+		// Snapshot $EDITOR now, at construction, before any script can run
+		// runtime.setenv — this is the host-controlled fallback editor.
+		editorEnv: strings.Fields(os.Getenv("EDITOR")),
 	}
+	// Freeze the editor at construction: resolve its command to an absolute path
+	// using the host's PATH *now* (before any script), so huh's exec.Command uses
+	// that exact binary rather than re-resolving a bare name against the live,
+	// script-mutable PATH on Ctrl+E.
+	m.editorCmd = m.freezeEditor()
+	return m
+}
+
+// freezeEditor resolves the write editor from host-controlled sources (host-only
+// config → $EDITOR snapshot → nano) and, best-effort, rewrites its command to an
+// absolute path via the host's PATH at construction time.
+func (m *Module) freezeEditor() []string {
+	editor := m.editorSources()
+	if path, err := exec.LookPath(editor[0]); err == nil {
+		editor = append([]string{path}, editor[1:]...)
+	}
+	return editor
+}
+
+// editorSources returns the raw host-controlled editor: the host-only `editor`
+// config, else the $EDITOR snapshot taken at construction, else a fixed default.
+func (m *Module) editorSources() []string {
+	if cfg, err := base.GetConfigValue[[]string](m.cfgMod, configKeyEditor); err == nil && len(cfg) > 0 {
+		return cfg
+	}
+	if len(m.editorEnv) > 0 {
+		return m.editorEnv
+	}
+	return []string{defaultWriteEditor}
+}
+
+// resolveEditor returns the frozen editor command write passes to huh — resolved
+// at construction from host-controlled sources only (config → $EDITOR snapshot →
+// nano) with its command already rewritten to an absolute path, so a script can
+// neither NAME it nor PATH-hijack it. (The editor subprocess still inherits the
+// live environment, so editor env such as VIMINIT remains a host/sandbox residual
+// — see the note above starWrite.)
+func (m *Module) resolveEditor() []string {
+	return m.editorCmd
 }
 
 // LoadModule returns the Starlark module loader with the gum-specific functions.

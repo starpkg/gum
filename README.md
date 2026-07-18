@@ -116,10 +116,13 @@ parameters, returns, errors, and examples.
 ## Configuration
 
 The `gum` module is configured through `starpkg/base`: options `width`,
-`height`, `theme`, and `editor`, each with an environment variable
-(`GUM_<KEY>`) and an auto-generated `get_<key>` / `set_<key>` script accessor
-pair. See **[`docs/API.md` → Configuration](docs/API.md#configuration)** for the
-full table and the Go constructors (`NewModule`, `NewModuleWithConfig`).
+`height`, `theme`, and `editor`, each with an environment variable (`GUM_<KEY>`).
+`width`/`height`/`theme` expose an auto-generated `get_<key>` / `set_<key>`
+script accessor pair; `editor` is **host-only** (it names the command `write`
+runs via `os/exec`, so a script gets a read-only `get_editor` but **no
+`set_editor`** and cannot choose it). See
+**[`docs/API.md` → Configuration](docs/API.md#configuration)** for the full table
+and the Go constructors (`NewModule`, `NewModuleWithConfig`).
 
 ## License
 

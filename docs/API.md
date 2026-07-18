@@ -35,7 +35,7 @@ The module is loaded under the name `gum`; load individual builtins with
 - [Theming](#theming)
   - [`set_theme`](#set_theme)
 - [Configuration](#configuration)
-  - Accessors: `get_width` / `set_width`, `get_height` / `set_height`, `get_theme` / `set_theme`, `get_editor` / `set_editor`
+  - Accessors: `get_width` / `set_width`, `get_height` / `set_height`, `get_theme` / `set_theme`, `get_editor` (host-only — no `set_editor`)
 
 > **TTY note.** Every interactive builtin (`input`, `write`, `select`,
 > `multi_select`, `filter`, `confirm`, `file_pick`, `note`, `spin`) drives the host's
@@ -84,7 +84,7 @@ Errors: `password` must be a bool or `None`.
 
 ```text
 write(value="", placeholder="Write something...", title="", description="",
-      char_limit=0, validate=None, editor=None, width=<config>, height=5,
+      char_limit=0, validate=None, width=<config>, height=5,
       show_line=False, show_help=True, timeout=0)
 ```
 
@@ -98,36 +98,42 @@ Parameters:
 - `description`: Description text (default: `""`).
 - `char_limit`: Maximum character limit (default: `0` — no limit).
 - `validate`: Validation function (default: `None`); same contract as `input`.
-- `editor`: External editor command as a string (e.g. `"vim"`) or list (e.g.
-  `["code", "--wait"]`). When omitted/empty, falls back to the module's
-  configured `editor`; if that is also empty, `huh` uses its own default
-  (`$EDITOR`, else `nano`).
 - `width`: Component width (default: the configured `width`).
 - `height`: Component height (default: `5`).
 - `show_line`: Show line numbers (default: `False`).
 - `show_help`: Show help key bindings (default: `True`).
 - `timeout`: Timeout in seconds (default: `0` — no timeout).
 
+The external editor opened with **Ctrl+E** runs a host-configured `editor`
+command (via `os/exec`). A script **cannot name it** (no per-call `editor`
+argument and no `set_editor`) **nor PATH-hijack it**: the command is resolved only
+from host-controlled sources — the `editor` config (see
+[Configuration](#configuration)), else the host's `$EDITOR` **captured at module
+construction**, else `nano` — and frozen to an absolute path at construction.
+
+> **Residual (host/sandbox concern).** `huh`/`bubbletea` — not `gum` — construct
+> the subprocesses they run, and `gum` cannot set their environment. So a host
+> that lets an untrusted script mutate the process environment (e.g. by exposing a
+> `runtime` module's `setenv`) leaves two surfaces: the **editor subprocess
+> inherits the live environment**, so editor env such as `VIMINIT` executes for
+> editors that honor it (e.g. vim); and **bubbletea's color detection execs a bare
+> `tmux`** (via the live `PATH`) during terminal detection on *any* form,
+> including `spin` (whose spinner exposes no environment hook). Close these by not
+> granting untrusted scripts process-environment mutation, or by sandboxing the
+> interpreter.
+
 Returns the entered text as a string, or `None` if cancelled or timed out.
 
 Example:
 
 ```python
-load("gum", "write", "set_editor")
+load("gum", "write")
 
-# Set the module's default editor.
-set_editor(["vim"])
-
-# Uses the module's default editor on Ctrl+E.
+# The external editor (Ctrl+E) is whatever the host configured via GUM_EDITOR
+# or NewModuleWithConfig; the script cannot change it.
 notes = write(
     title = "Meeting Notes",
-    description = "Press Ctrl+E to open in your default editor",
-)
-
-# Override the editor for this call only.
-vscode_notes = write(
-    title = "VSCode Notes",
-    editor = ["code", "--wait"],
+    description = "Press Ctrl+E to open in your configured editor",
 )
 
 print("Notes recorded:", len(notes) if notes else 0, "characters")
@@ -724,19 +730,28 @@ a default, can be set from its environment variable (uppercased, prefixed with
 script through an auto-generated accessor pair.
 
 For each non-secret option, `base` generates a `get_<key>` builtin (returns the
-current value) and a `set_<key>` builtin (takes a single value, returns
-`None`). All four `gum` options are non-secret, so each exposes both accessors.
+current value) and a `set_<key>` builtin (takes a single value, returns `None`).
+`width`, `height`, and `theme` expose both accessors.
+
+`editor` is **host-only**: it names the command `write` runs via `os/exec` when
+the user opens the external editor, so a script must not be able to choose it.
+`base` generates `get_editor` (read-only) but **no `set_editor`**, and snapshots
+its environment value at construction — the editor is set host-side only, via
+`GUM_EDITOR` or `NewModuleWithConfig`.
 
 > **Secret options** would expose only a `set_<key>` builtin and no getter (the
 > value is never readable from a script). The `gum` module has no secret
 > options.
+>
+> **Host-only options** (like `editor`) expose only a read-only `get_<key>` and
+> **no `set_editor`** — the value can be read but not changed from a script.
 
 | Option | `get_` accessor | `set_` accessor | Env var | Default | Description |
 |--------|-----------------|-----------------|---------|---------|-------------|
 | `width` | `get_width` | `set_width` | `GUM_WIDTH` | `50` | Default width for TUI components (`0` = terminal width). |
 | `height` | `get_height` | `set_height` | `GUM_HEIGHT` | `0` | Default height for components (`0` = automatic). |
 | `theme` | `get_theme` | `set_theme` | `GUM_THEME` | `charm` | Theme name. **`set_theme` is overridden by `gum`** to re-apply the theme immediately (see above). |
-| `editor` | `get_editor` | `set_editor` | `GUM_EDITOR` | `[]` | Default external editor command for `write` (e.g. `["vim", "-f"]`); empty falls back to `huh`. |
+| `editor` | `get_editor` | _host-only, no `set_editor`_ | `GUM_EDITOR` | `[]` | External editor command for `write` (e.g. `["vim", "-f"]`); empty falls back to the host's `$EDITOR` snapshot (taken at construction), else `nano`. **Host-only** — a script cannot name it (see the residual note in [`write`](#write)). |
 
 Available themes: `base` (minimal, monochrome), `base16` (simple 16-color),
 `charm` (default), `dracula`, `catppuccin`.
