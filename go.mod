@@ -1,6 +1,6 @@
 module github.com/starpkg/gum
 
-go 1.25.8
+go 1.26.8
 
 require (
 	bitbucket.org/ai69/colorlogo v0.1.3
@@ -13,7 +13,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.14.0
 	github.com/sahilm/fuzzy v0.1.1
 	github.com/starpkg/base v0.1.3
-	go.starlark.net v0.0.0-20260324133313-ffb3f39dd27a
+	go.starlark.net v0.0.0-20260708150628-5395d018f003
 )
 
 require (
@@ -32,12 +32,11 @@ require (
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
-	github.com/chzyer/readline v1.5.0 // indirect
+	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dlclark/regexp2 v1.11.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/h2so5/here v0.0.0-20200815043652-5e14eb691fae // indirect
@@ -60,7 +59,7 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )

@@ -127,3 +127,7 @@ and the Go constructors (`NewModule`, `NewModuleWithConfig`).
 ## License
 
 This package is licensed under the MIT License - see the LICENSE file for details.
+
+## Go compatibility
+
+Go 1.26.8 or newer is required. Release builds use Go 1.27.1. The parser and Unicode dependencies include the reviewed security fixes.
