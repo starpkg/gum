@@ -1,6 +1,6 @@
 module github.com/starpkg/gum
 
-go 1.26.8
+go 1.25.8
 
 require (
 	bitbucket.org/ai69/colorlogo v0.1.3
@@ -13,7 +13,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.14.0
 	github.com/sahilm/fuzzy v0.1.1
 	github.com/starpkg/base v0.1.3
-	go.starlark.net v0.0.0-20260708150628-5395d018f003
+	go.starlark.net v0.0.0-20260324133313-ffb3f39dd27a
 )
 
 require (

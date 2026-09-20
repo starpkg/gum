@@ -9,6 +9,16 @@ on:
 permissions: read-all
 
 jobs:
+  compatibility:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.27.1"
+      - name: Verify the pinned interpreter
+        run: test "$(go list -m -f '{{.Version}}' go.starlark.net)" = "v0.0.0-20260324133313-ffb3f39dd27a"
+
   ci:
     permissions:
       contents: read
@@ -19,7 +29,7 @@ jobs:
     # automate this).
     uses: 1set/meta/.github/workflows/go-ci.yml@23f088bcd6dce16c93e0056d7b70b4f4434208e8
     with:
-      go-floor: "1.26"
+      go-floor: "1.25"
       doc-coverage: true
       doc-coverage-file: docs/API.md
       doc-coverage-config: true
