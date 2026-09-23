@@ -22,10 +22,10 @@ gofmt -l . && go vet ./...                 # must be clean before commit
 go run github.com/1set/meta/doccov@master . # doc-coverage gate (must exit 0)
 ```
 
-**Verify on the go floor in Docker** — this repo's floor is **go 1.21** (see Release discipline), and may differ from the local toolchain. Behavior on the floor must be checked in a container:
+**Verify on the go floor in Docker** — this repo's floor is **go 1.25.8** (see Release discipline), and may differ from the local toolchain. Behavior on the floor must be checked in a container:
 
 ```bash
-docker run --rm -v "$PWD":/src -v "$HOME/go/pkg/mod":/go/pkg/mod -w /src golang:1.21 go test -race -count=1 ./...
+docker run --rm -v "$PWD":/src -v "$HOME/go/pkg/mod":/go/pkg/mod -w /src golang:1.25.8 go test -race -count=1 ./...
 ```
 
 **TTY note.** Every interactive builtin (`input`, `select`, `multi_select`, `filter`, `confirm`, `file_pick`, `write`, `note`, `spin`) opens `/dev/tty` via `huh`/`bubbletea`. Headless environments (CI, sandboxes, plain `go test` without a terminal) make these fail with `could not open a new TTY`. That is an environment limitation, **not** a code regression; non-interactive paths (`colorize`, `md`, argument validation, the `panic-*` scripts) run anywhere. Integration scripts under `../test/gum/*.star` live in the **private `starpkg/test` repo** and the harness **auto-skips** when that directory is absent (e.g. in CI).
@@ -67,7 +67,7 @@ Three layers must stay in sync (enforced by the doc standard, `plan/starpkg文�
 
 ## Release discipline
 
-- **Floor = go 1.25**, following this repo's `go.mod` (raised only in its own pin PR / SEP, never incidentally). gum is the ecosystem's **go-1.25 exception**: the Charm **v2** stack (`charm.land/bubbletea/v2`, `huh/v2`, `glamour/v2`, `lipgloss/v2`) declares `go 1.25.8` (huh/glamour), forcing the floor — every other Star\* repo stays on its own lower floor. The v2 migration and the floor rise are the same PR. Because the floor (1.25) coincides with the latest stable, the CI matrix's floor leg and latest leg are both `1.25.x`.
+- **Floor = go 1.25.8**. The Charm dependencies require Go 1.25.8; x/text requires Go 1.25.0. This is a compatibility floor, not a production toolchain recommendation. CI tests Go 1.25.x and 1.27.x.
 - **CI** runs via the centralized reusable workflow in `1set/meta` (`go-ci.yml`, pinned by commit SHA), matrix `floor + latest stable`, with `doc-coverage: true` wired in `.github/workflows/build.yml`.
 - **Codacy note:** the `agent-rules` analyzer currently rejects `CLAUDE.md`; that gate is being disabled org-wide, so a red Codacy check on this file is expected and not a blocker — every other check (tests, doc-coverage) must be green.
 - **Bumping the version, the go floor, or tagging are user-confirmed actions** — never tag autonomously; default to patch bumps; published tags are immutable.
