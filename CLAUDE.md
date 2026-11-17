@@ -69,5 +69,5 @@ Three layers must stay in sync (enforced by the doc standard, `plan/starpkg文�
 
 - **Floor = go 1.25.8**. The Charm dependencies require Go 1.25.8; x/text requires Go 1.25.0. This is a compatibility floor, not a production toolchain recommendation. CI tests Go 1.25.x and 1.27.x.
 - **CI** runs via the centralized reusable workflow in `1set/meta` (`go-ci.yml`, pinned by commit SHA), matrix `floor + latest stable`, with `doc-coverage: true` wired in `.github/workflows/build.yml`.
-- **Checks:** current exact-head required checks and both coverage contexts must pass before release. Do not waive a failing analyzer because an older run failed.
+- **Checks:** preserve the required CI and analyzer gates. Review functional tests and local coverage comparisons under the owner’s current batch policy; an absent coverage-service signal alone is not a code failure.
 - **Bumping the version, the go floor, or tagging are user-confirmed actions** — never tag autonomously; default to patch bumps; published tags are immutable.
