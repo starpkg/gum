@@ -9,7 +9,7 @@ A powerful Starlark module for building Terminal User Interfaces (TUI), inspired
 
 ## Overview
 
-Within the Star\* ecosystem, **starpkg provides support for necessary local operations plus simple abstractions over common online services, for ease of use.** `gum` is squarely a **local capability**: it drives the host's own terminal — prompts, selections, spinners, Markdown rendering, gradient text — and touches no network service. It is an L4 domain module that depends downward on `starpkg/base` (the module/config system) and `1set/starlet` (the Machine runner), and transitively `1set/starlight` + `go.starlark.net`.
+Within the Star\* ecosystem, **starpkg provides support for necessary local operations plus simple abstractions over common online services, for ease of use.** `gum` is squarely a **local capability**: it drives the host's own terminal — prompts, selections, spinners, Markdown rendering, gradient text — and touches no network service. It is an L3 domain module that depends downward on `starpkg/base` (the module/config system) and `1set/starlet` (the Machine runner), and transitively `1set/starlight` + `go.starlark.net`.
 
 ## Features
 
@@ -130,4 +130,4 @@ This package is licensed under the MIT License - see the LICENSE file for detail
 
 ## Go compatibility
 
-Go 1.25.8 or newer is required. Release builds use Go 1.27.1. The Unicode dependency includes the reviewed fix. The interpreter stays at `ffb3f39dd27a` and retains its known parser recursion limitation; parse only host-reviewed source in-process.
+Go 1.25.8 or newer is required. Use a supported patched Go toolchain for production builds; the minimum version is a compatibility floor. The Unicode dependency includes the reviewed fix. The interpreter stays at `ffb3f39dd27a` and retains its known parser recursion limitation; parse only host-reviewed source in-process.

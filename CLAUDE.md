@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`starpkg/gum` is an **L4 domain module** of the Star\* ecosystem: it exposes a terminal-UI toolkit to Starlark scripts. A script imports the module and prompts for text, chooses from lists, confirms actions, picks files, shows spinners and notes, renders Markdown, and colorizes text — all by driving the **host's own terminal**.
+`starpkg/gum` is an **L3 domain module** of the Star\* ecosystem: it exposes a terminal-UI toolkit to Starlark scripts. A script imports the module and prompts for text, chooses from lists, confirms actions, picks files, shows spinners and notes, renders Markdown, and colorizes text — all by driving the **host's own terminal**.
 
 starpkg as a whole is **support for necessary local operations plus simple abstractions over common online services, for ease of use.** `gum` sits firmly on the *local* side: it is a **local capability**, with **no network access** — it talks only to the controlling TTY. It wraps the Charm stack ([`huh`](https://github.com/charmbracelet/huh) forms, [`bubbletea`](https://github.com/charmbracelet/bubbletea), [`glamour`](https://github.com/charmbracelet/glamour) Markdown, [`lipgloss`](https://github.com/charmbracelet/lipgloss)) plus `bitbucket.org/ai69/colorlogo` for gradient text, behind one flat set of Starlark builtins.
 
-Layer position: depends downward on `starpkg/base` (the module/config system + the `RunStarlarkTests` harness), `1set/starlet` (the Machine + `dataconv`/`dataconv/types` argument helpers), and transitively `1set/starlight` + `go.starlark.net`. Nothing in the ecosystem depends on it.
+Layer position: depends downward on `starpkg/base` (the module/config system + the `RunStarlarkTests` harness), `1set/starlet` (the Machine + `dataconv`/`dataconv/types` argument helpers), and transitively `1set/starlight` + `go.starlark.net`. StarCLI registers this module; it does not depend upward on StarCLI.
 
 ## Dev commands
 
@@ -69,5 +69,5 @@ Three layers must stay in sync (enforced by the doc standard, `plan/starpkg文�
 
 - **Floor = go 1.25.8**. The Charm dependencies require Go 1.25.8; x/text requires Go 1.25.0. This is a compatibility floor, not a production toolchain recommendation. CI tests Go 1.25.x and 1.27.x.
 - **CI** runs via the centralized reusable workflow in `1set/meta` (`go-ci.yml`, pinned by commit SHA), matrix `floor + latest stable`, with `doc-coverage: true` wired in `.github/workflows/build.yml`.
-- **Codacy note:** the `agent-rules` analyzer currently rejects `CLAUDE.md`; that gate is being disabled org-wide, so a red Codacy check on this file is expected and not a blocker — every other check (tests, doc-coverage) must be green.
+- **Checks:** current exact-head required checks and both coverage contexts must pass before release. Do not waive a failing analyzer because an older run failed.
 - **Bumping the version, the go floor, or tagging are user-confirmed actions** — never tag autonomously; default to patch bumps; published tags are immutable.
